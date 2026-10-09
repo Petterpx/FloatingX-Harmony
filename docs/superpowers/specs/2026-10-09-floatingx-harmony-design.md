@@ -69,6 +69,8 @@ app / system 共用 tag 命名空间。重复 tag 默认报 `DUPLICATE_TAG`，�
 
 ### 系统浮窗
 
+API 12 的商业 HarmonyOS 支持受发行权限政策约束：[华为 V5 受限开放权限文档](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-v5/restricted-permissions-V5)将 `SYSTEM_FLOAT_WINDOW` 标为系统授权，并限定特定 2in1 场景申请。因此首版实现系统适配器和明确失败/显式降级语义，不把手机、平板上的系统浮窗声明为已支持。公开 OpenHarmony SDK 编译不能替代该授权与设备验证；系统示例提供明确关闭入口。
+
 通过 window.createWindow 创建 TYPE_FLOAT 窗口，设置大小、位置、背景和触摸属性，加载 ArkUI 内容。初始尺寸显式提供，内容尺寸更新经窗口适配器同步；避免用全屏透明窗口截获其他应用触摸。
 
 首次 show 检查权限及设备支持情况。权限配置、授权或受限权限申请由宿主按目标 HarmonyOS SDK 和发布要求完成；库提供检查结果及宿主处理回调，不擅自拉起设置页。失败默认 reject。仅当显式启用 app fallback 且提供有效 app 宿主时才降级，回调报告实际 scope 与失败原因，原系统窗口必须先清理。
