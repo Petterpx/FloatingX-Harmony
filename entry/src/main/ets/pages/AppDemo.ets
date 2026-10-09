@@ -1,4 +1,4 @@
-import { FxWindowHost, FxAppPlatform, FxContent, FxController, FxConfig } from 'floatingx';
+import { FloatingX, FxWindowHost, FxContent, FxControl, FxConfig, FxMemoryStorage } from 'floatingx';
 class AppContentParams {
   close: () => void;
   button: () => void;
@@ -16,8 +16,7 @@ export struct AppDemo {
   @LocalStorageLink('fxHostReady') @Watch('hostReady') private ready: boolean = false;
   @State private message: string = '等待主窗口加载';
   private host?: FxWindowHost;
-  private controller?: FxController;
-  private platform?: FxAppPlatform;
+  private controller?: FxControl<AppContentParams>;
   private paths: NavPathStack = new NavPathStack();
   aboutToAppear(): void { this.hostReady(); }
   private hostReady(): void {
@@ -27,11 +26,16 @@ export struct AppDemo {
     this.host=host; host.setPage('Home');
     const content=new FxContent<AppContentParams>(wrapBuilder(appContent),new AppContentParams(
       () => { if(this.controller!==undefined) this.run(this.controller.cancel()); },() => { this.message='内按钮已点击'; }),{width:240,height:100});
-    const platform=new FxAppPlatform(host,content,{mode:'blacklist',names:['Blocked']},{dragArea:{x:0,y:0,width:240,height:40}});
-    const controller=new FxController(platform,new FxConfig({position:{x:20,y:120},adsorb:false}));
-    platform.bindController(controller); this.platform=platform; this.controller=controller;
+    // README app snippet. WindowHost is created after WindowStage.loadContent.
+    const controller=FloatingX.installApp({tag:'app-demo',host:host,content:content,
+      config:new FxConfig({position:{x:20,y:120},adsorb:false}),
+      pagePolicy:{mode:'blacklist',names:['Blocked']},
+      storage:{namespace:'demo',storage:new FxMemoryStorage()},
+      interactions:{dragArea:{x:0,y:0,width:240,height:40}}});
+    this.controller=controller;
     this.message='API 12 应用内浮窗'; this.run(controller.show());
   }
+  aboutToDisappear(): void {if(this.controller!==undefined)this.run(this.controller.cancel());}
   private run(promise: Promise<void>): void { promise.catch((error: Error) => { this.message=error.message; }); }
   @Builder
   destination(name: string) {
@@ -50,6 +54,7 @@ export struct AppDemo {
           Button('显示').onClick(() => { if(this.controller!==undefined) this.run(this.controller.show()); })
           Button('隐藏').onClick(() => { if(this.controller!==undefined) this.run(this.controller.hide()); })
         }
+        Button('取消').onClick(() => {if(this.controller!==undefined)this.run(this.controller.cancel());})
         Button('底层按钮').onClick(() => { this.message='底层按钮已点击'; })
         Button('原生 Dialog').onClick(() => this.getUIContext().showAlertDialog({title:'Dialog 应在浮窗上方',message:'验证遮挡与关闭后的按钮点击',confirm:{value:'关闭',action:() => {}}}))
         Button('router 黑名单页面').onClick(() => this.getUIContext().getRouter().pushUrl({url:'pages/FilteredPage'}))

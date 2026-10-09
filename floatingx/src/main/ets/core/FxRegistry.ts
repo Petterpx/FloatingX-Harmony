@@ -1,5 +1,5 @@
 import { FxController } from './FxController';
-import { FxError } from './FxError';
+import { FxError, FxUninstallFailure, FxUninstallError } from './FxError';
 
 class FxRegistration {
   tag: string;
@@ -42,12 +42,12 @@ export class FxRegistry {
   async uninstallAll(): Promise<void> {
     const snapshot: FxRegistration[] = [];
     this.entries.forEach((controller: FxController, tag: string) => { snapshot.push(new FxRegistration(tag, controller)); });
-    const failures: Error[] = [];
+    const failures: FxUninstallFailure[] = [];
     const releases: Promise<void>[] = snapshot.map((registration: FxRegistration) =>
-      this.release(registration).catch((error: Error) => { failures.push(error); }));
+      this.release(registration).catch((error: Error) => { failures.push({tag: registration.tag, error: error instanceof FxError ? error : new FxError('WINDOW_OPERATION_FAILED', 'Float release failed')}); }));
     await Promise.all(releases);
     // Every controller reports its own error; the batch rejects after all releases settle.
-    if (failures.length > 0) throw failures[0];
+    if (failures.length > 0) throw new FxUninstallError(failures);
   }
 
   private async release(registration: FxRegistration): Promise<void> {

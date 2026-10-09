@@ -1,6 +1,6 @@
-import { FxGeometryInput } from 'floatingx/src/main/ets/geometry/FxGeometry';
 import common from '@ohos.app.ability.common';
-import { FxNativeWindowFactory, FxSystemPlatform, FxAppPlatform, FxWindowHost, FxContent, FxController, FxConfig, FxDisplayMode, FxInteractions } from 'floatingx';
+import { FloatingX, FxWindowHost, FxContent, FxControl, FxConfig, FxDisplayMode, FxSystemFallback } from 'floatingx';
+import { DemoOwner } from '../entryability/DemoOwner';
 class SystemContentParams {close: () => void;constructor(close: () => void) {this.close=close;}}
 @Builder
 function systemContent(params: SystemContentParams) {
@@ -8,32 +8,35 @@ function systemContent(params: SystemContentParams) {
 }
 @Component
 export struct SystemDemo {
-  @State private message: string = 'SYSTEM_FLOAT_WINDOW 在商业 HarmonyOS V5 限批准的 2in1 场景；手机/平板授权未验收';
-  private controller?: FxController;
-  private platform?: FxSystemPlatform;
-  private async open(fallback: boolean): Promise<void> {
-    if(this.controller!==undefined)await this.controller.cancel();
-    const content=new FxContent<SystemContentParams>(wrapBuilder(systemContent),new SystemContentParams(() => {this.controller?.cancel().catch((error: Error) => {this.message=error.message;});}),{width:220,height:90});
-    const interactions: FxInteractions={dragArea:{x:0,y:0,width:220,height:40}};
-    const factory=new FxNativeWindowFactory(this.getUIContext().getHostContext() as common.UIAbilityContext,content,interactions);
-    const input: FxGeometryInput={viewport:{size:{width:300,height:500},insets:{left:0,top:0,right:0,bottom:0}},content:content.size,config:new FxConfig()};
-    const platform=new FxSystemPlatform(factory,input,fallback ? () => {
+  @State private message: string = '商业 HarmonyOS V5 限批准的 2in1 场景；手机/平板系统权限未验收';
+  private control?: FxControl<SystemContentParams>;
+  private async open(allowFallback: boolean): Promise<void> {
+    if(this.control!==undefined)await this.control.cancel();
+    let fallback: FxSystemFallback | undefined;
+    if(allowFallback) {
       const host=this.getUIContext().getSharedLocalStorage()?.get<FxWindowHost>('fxWindowHost');
-      if(host===undefined)throw new Error('App fallback requires a loaded WindowHost');return new FxAppPlatform(host,content,{mode:'blacklist',names:[]},interactions);
-    }:undefined,(event) => {this.message='actualScope='+event.actualScope+'; '+event.error?.message;});
-    const controller=new FxController(platform,new FxConfig({position:{x:20,y:100},adsorb:false}),(event) => {if(event.error!==undefined)this.message=event.error.code+': '+event.error.message;});
-    platform.bindController(controller);
-    // Bind owner teardown only; system visibility is independent of app foreground/page.
-    this.getUIContext().getSharedLocalStorage()?.get<FxWindowHost>('fxWindowHost')?.bind(controller);
-    this.platform=platform;this.controller=controller;
-    await controller.show();this.message='actualScope='+platform.actualScope;
+      if(host===undefined)throw new Error('显式 app 降级需要已加载的 WindowHost');
+      fallback={host:host,pagePolicy:{mode:'blacklist',names:[]}};
+    }
+    // README system snippet. Context alone suffices when fallback is omitted.
+    const control=FloatingX.installSystem({tag:'system-demo',
+      context:this.getUIContext().getHostContext() as common.UIAbilityContext,
+      content:new FxContent(wrapBuilder(systemContent),new SystemContentParams(() => {if(this.control!==undefined)this.run(this.control.cancel());}),{width:220,height:90}),
+      size:{width:220,height:90},config:new FxConfig({position:{x:20,y:100},adsorb:false}),
+      fallback:fallback,interactions:{dragArea:{x:0,y:0,width:220,height:40}},
+      events:(event) => {this.message='actualScope='+event.actualScope+(event.error===undefined?'':'; '+event.error.code+': '+event.error.message);}});
+    this.getUIContext().getSharedLocalStorage()?.get<DemoOwner>('fxSystemOwner')?.add(control);
+    this.control=control;await control.show();
   }
+  aboutToDisappear(): void {if(this.control!==undefined)this.run(this.control.cancel());}
   private run(promise: Promise<void>): void {promise.catch((error: Error) => {this.message=error.message;});}
   build() {Column({space:12}) {
     Text(this.message)
     Button('显示系统浮窗（不降级）').onClick(() => this.run(this.open(false)))
-    Button('显示；权限/能力失败时允许 app 降级').onClick(() => this.run(this.open(true)))
-    Button('DisplayOnly：跨应用透传验收').onClick(() => {if(this.controller!==undefined)this.run(this.controller.updateConfig(new FxConfig({displayMode:FxDisplayMode.DisplayOnly})));})
-    Button('关闭').onClick(() => {if(this.controller!==undefined)this.run(this.controller.cancel());})
+    Button('权限/能力失败时显式 app 降级').onClick(() => this.run(this.open(true)))
+    Button('DisplayOnly：跨应用透传验收').onClick(() => {if(this.control!==undefined)this.run(this.control.updateConfig(new FxConfig({displayMode:FxDisplayMode.DisplayOnly})));})
+    Button('隐藏（保留窗口）').onClick(() => {if(this.control!==undefined)this.run(this.control.hide());})
+    Button('重新显示').onClick(() => {if(this.control!==undefined)this.run(this.control.show());})
+    Button('关闭并销毁').onClick(() => {if(this.control!==undefined)this.run(this.control.cancel());})
   }.width('100%').padding(16)}
 }

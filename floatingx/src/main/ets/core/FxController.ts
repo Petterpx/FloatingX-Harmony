@@ -147,6 +147,7 @@ export class FxController {
   }
 
   updateConfig(config: FxConfig): Promise<void> {
+    if (this.state === FxState.DESTROYING || this.state === FxState.DESTROYED) return Promise.reject(this.destroyedError());
     let snapshot: FxConfig;
     try { snapshot = config.copy(); } catch (error) { return Promise.reject(normalizeError(error as Error)); }
     const generation = this.generation;
@@ -192,6 +193,7 @@ export class FxController {
   }
 
   clearPosition(): Promise<void> {
+    if (this.state === FxState.DESTROYING || this.state === FxState.DESTROYED) return Promise.reject(this.destroyedError());
     return this.positionSession === undefined ? Promise.resolve() : this.positionSession.clear();
   }
 
@@ -414,10 +416,14 @@ export class FxController {
       const event = events[i];
       if (event.error !== undefined && event.error.code !== 'DESTROYED') this.log(event.error);
       if (this.onEvent !== undefined) {
-        try { this.onEvent(event); } catch (error) { this.log(normalizeError(error as Error, 'EVENT_CALLBACK_FAILED')); }
+        try {
+          const completion = this.onEvent(event);
+          if (completion instanceof Promise) completion.catch(() => this.callbackFailure());
+        } catch (_) { this.callbackFailure(); }
       }
     }
   }
+  private callbackFailure(): void { this.log(new FxError('EVENT_CALLBACK_FAILED', 'Event callback failed')); }
   private log(error: FxError): void {
     try { this.logger.error(error); } catch (_) { /* User logging cannot affect lifecycle cleanup. */ }
   }

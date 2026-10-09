@@ -16,7 +16,7 @@ export interface FxEvent {
   actualScope: FxScope;
   error?: FxError;
 }
-export type FxEventCallback = (event: FxEvent) => void;
+export type FxEventCallback = (event: FxEvent) => void | Promise<void>;
 export interface FxLogger { error(error: FxError): void; }
 
 /** A rejecting operation must leave its last successful native state intact.

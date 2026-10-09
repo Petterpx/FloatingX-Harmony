@@ -1,3 +1,4 @@
+import { MultipleDemo } from './MultipleDemo';
 import { ScopeDemo } from './ScopeDemo';
 import { SystemDemo } from './SystemDemo';
 import { AppDemo } from './AppDemo';
@@ -14,6 +15,7 @@ struct Index {
       TabContent() { ScopeDemo() }.tabBar('局部')
       TabContent() { AppDemo() }.tabBar('应用')
       TabContent() { SystemDemo() }.tabBar('系统')
+      TabContent() { MultipleDemo() }.tabBar('多实例')
     }.width('100%').height('100%')
   }
 }

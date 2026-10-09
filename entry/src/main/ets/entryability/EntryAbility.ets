@@ -19,13 +19,16 @@ import window from '@ohos.window';
 import hilog from '@ohos.hilog';
 
 import { FxWindowHost } from 'floatingx';
+import { DemoOwner } from './DemoOwner';
 
 export default class EntryAbility extends UIAbility {
   private host?: FxWindowHost;
+  private systemOwner: DemoOwner = new DemoOwner();
   private stageEpoch: number = 0;
   onWindowStageCreate(windowStage: window.WindowStage): void {
     const epoch=++this.stageEpoch;
     const storage=new LocalStorage(); storage.setOrCreate('fxHostReady',false);
+    storage.setOrCreate('fxSystemOwner',this.systemOwner);
     windowStage.loadContent('pages/Index',storage,(err) => {
       if(err.code) { hilog.error(0xFF00,'EntryAbility','Failed to load page: %{public}s',err.message); return; }
       if(epoch!==this.stageEpoch) return;
@@ -35,7 +38,9 @@ export default class EntryAbility extends UIAbility {
       }).catch((error: Error) => { hilog.error(0xFF00,'EntryAbility','Host creation: %{public}s',error.message); });
     });
   }
+  onDestroy(): void {this.systemOwner.cancel().catch((error: Error) => {hilog.error(0xFF00,'EntryAbility','System cleanup: %{public}s',error.message);});}
   onWindowStageDestroy(): void {
+    this.systemOwner.cancel().catch((error: Error) => {hilog.error(0xFF00,'EntryAbility','System owner cleanup: %{public}s',error.message);});
     this.stageEpoch++; const host=this.host; this.host=undefined;
     if(host!==undefined) host.dispose().catch((error: Error) => { hilog.error(0xFF00,'EntryAbility','Host cleanup: %{public}s',error.message); });
   }

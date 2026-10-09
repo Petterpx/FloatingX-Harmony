@@ -4,5 +4,7 @@
   "version": "0.1.0",
   "description": "FloatingX HarmonyOS library and Stage sample",
   "dependencies": {},
-  "devDependencies": {}
+  "devDependencies": {
+    "@ohos/hypium": "1.0.29"
+  }
 }

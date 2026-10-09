@@ -1,22 +1,24 @@
 import { FxError } from '../core/FxError';
-import { FxController } from '../core/FxController';
+import { FxControlHandle } from '../FloatingX';
+import { scopeHostBinding } from './FxHostBinding';
 import { FxContentSource } from '../component/FxContent';
 import { FxFloatView } from '../component/FxFloatView';
 import { FxScopePlatform } from './FxScopePlatform';
 
 @Component
 export struct FloatingXHost {
-  controller?: FxController = undefined;
-  platform: FxScopePlatform = new FxScopePlatform();
-  content?: FxContentSource = undefined;
+  control?: FxControlHandle = undefined;
+  private platform: FxScopePlatform = new FxScopePlatform();
   @BuilderParam host: () => void;
   @State private revision: number = 0;
   private release?: () => void;
   aboutToAppear(): void {
-    if(this.controller===undefined || this.content===undefined) throw new FxError('INVALID_CONFIG','FloatingXHost requires controller and content');
-    this.platform.bindController(this.controller);
+    const binding=this.control===undefined?undefined:scopeHostBinding(this.control);
+    if(binding===undefined) throw new FxError('INVALID_CONFIG','FloatingXHost requires a live scope control');
+    this.platform=binding.platform;
+    this.platform.bindController(binding.controller);
     this.release=this.platform.subscribe(() => { this.revision++; });
-    this.platform.mountHost(this.getUIContext(),this.content);
+    this.platform.mountHost(this.getUIContext(),binding.content);
   }
   aboutToDisappear(): void {
     if(this.release!==undefined) this.release(); this.release=undefined;

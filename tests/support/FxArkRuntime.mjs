@@ -32,7 +32,7 @@ export function loadAppPlatforms() {
  const Module=require('node:module'); const original=Module._load;
  Module._load=function(name,...args) {
   if(name==='@ohos.window') return {default:{WindowEventType:{WINDOW_SHOWN:1,WINDOW_HIDDEN:2}}};
-  if(name==='./FxAppFloatLayer') return {FxAppLayerParams:class {constructor(platform,revision){this.platform=platform;this.revision=revision;}},createAppLayer:(context,platform)=>({update(){},dispose(){context.overlay.disposals++;}})};
+  if(name==='./FxAppFloatLayer') return {FxAppLayerParams:class {constructor(platform,revision){this.platform=platform;this.revision=revision;}},createAppLayer:(context,platform)=>({platform,update(){},dispose(){context.overlay.disposals++;}})};
   return original.call(this,name,...args);
  };
  try { return {...require(path.join(root,'work/core/app/FxWindowHost.js')),...require(path.join(root,'work/core/app/FxAppPlatform.js'))}; }

@@ -4,5 +4,7 @@
   "version": "0.1.0",
   "description": "FloatingX floating window library for HarmonyOS Stage applications",
   "main": "Index.ets",
-  "dependencies": {}
+  "dependencies": {},
+  "license": "MIT",
+  "author": "Petterp"
 }

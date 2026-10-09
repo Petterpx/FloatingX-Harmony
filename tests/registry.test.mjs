@@ -111,3 +111,9 @@ test('uninstallAll snapshots registrations and preserves newly registered instan
   assert.deepEqual(registry.getAllTags(), ['fresh']);
   assert.equal(fresh.getState(), 'idle');
 });
+
+test('batch error retains every tag and native failure after all releases', async()=>{
+ const registry=new FxRegistry();const platforms=[new FakePlatform(),new FakePlatform()];
+ for(let i=0;i<2;i++){const c=controller(platforms[i]);registry.register('bad'+i,c);await c.show();platforms[i].errors.set('destroy',new FxError('WINDOW_OPERATION_FAILED','native',70+i));}
+ await assert.rejects(registry.uninstallAll(),error=>{assert.equal(error.code,'UNINSTALL_FAILED');assert.deepEqual(error.failures.map(f=>[f.tag,f.error.platformCode]),[['bad0',70],['bad1',71]]);return true;});assert.deepEqual(registry.getAllTags(),[]);
+});

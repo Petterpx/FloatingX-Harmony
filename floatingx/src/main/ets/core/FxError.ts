@@ -12,3 +12,13 @@ export class FxError extends Error {
     this.platformCode = platformCode;
   }
 }
+
+export interface FxUninstallFailure { tag: string; error: FxError; }
+/** Cleanup has settled for every snapshot entry; failures retain tag and native code. */
+export class FxUninstallError extends FxError {
+  readonly failures: FxUninstallFailure[];
+  constructor(failures: FxUninstallFailure[]) {
+    super('UNINSTALL_FAILED', 'One or more floats could not be released', failures[0].error.platformCode);
+    this.failures = failures.slice();
+  }
+}
