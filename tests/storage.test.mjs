@@ -197,3 +197,24 @@ test('moves before the first restore starts take precedence and cancel during sa
   const cancelling = second.controller.cancel(); gate.resolve(); assert.equal((await movingLate).code, 'DESTROYED'); await cancelling;
   assert.equal(events.some(e => e.type === 'move'), false);
 });
+
+test('cancel from restore failure callback prevents late native show', async () => {
+  const platform = new FakePlatform();
+  const events = [], errors = [];
+  let cancelled;
+  const controller = new FxController(platform, new FxConfig({ position: { x: 1, y: 2 } }), event => {
+    events.push(event);
+    if (event.error?.code === 'STORAGE_FAILED') cancelled = controller.cancel();
+  }, { error: error => errors.push(error) });
+  controller.bindPositionStorage(options({ async load() { return record(); }, async save() {}, async clear() {} }), geometry);
+  platform.errors.set('move', { code: 44, message: 'private native restore' });
+  await assert.rejects(controller.show(), { code: 'DESTROYED' });
+  await cancelled;
+  assert.deepEqual(platform.calls, ['create', 'applyConfig', 'move', 'destroy']);
+  assert.equal(controller.getState(), 'destroyed');
+  assert.equal(controller.isShow(), false);
+  assert.equal(events.some(event => event.type === 'show'), false);
+  assert.deepEqual(events.filter(event => event.error).map(event => event.error.code), ['STORAGE_FAILED', 'DESTROYED']);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].platformCode, 44);
+});

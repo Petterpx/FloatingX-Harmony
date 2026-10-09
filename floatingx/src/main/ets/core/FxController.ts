@@ -232,6 +232,7 @@ export class FxController {
           }
         }
       }
+      this.assertAlive(generation);
       await platform.show();
       this.visible = true;
       this.assertAlive(generation);
