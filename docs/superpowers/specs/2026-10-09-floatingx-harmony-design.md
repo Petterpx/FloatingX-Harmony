@@ -1,7 +1,7 @@
 # FloatingX 鸿蒙原生版设计规格
 
 日期：2026-10-09
-状态：用户于 2026-10-09 确认本文，实施计划已确认并开始实现；用户随后将最低兼容版本调整为 API 21。
+状态：用户于 2026-10-09 确认本文，实施计划已确认并开始实现；用户最新确认最低兼容版本为 API 12。
 
 ## 1. 目标与依据
 
@@ -9,7 +9,7 @@
 
 Android 基线为当前源码：`floatingx-core`、`floatingx-app`、`floatingx-scope`、`floatingx-system`、`floatingx-compose`。现有 README 仍含旧入口，移植以源码行为及本文明确的鸿蒙语义为准。不在 Android 仓库新增或修改任何文件。
 
-首版面向手机、平板的 Stage 模型，最低目标 API 21。实际编译使用支持该兼容级别的 HarmonyOS SDK，基线为 HarmonyOS 6.0.1(21)，可使用更高版本 SDK 编译但保留最低兼容 API 21。不承诺旧鸿蒙 Java UI、Android APK、跨进程共享控制器或所有设备形态行为一致。
+首版面向手机、平板的 Stage 模型，最低目标 API 12。实际编译使用支持该兼容级别的 HarmonyOS SDK，基线为 HarmonyOS 5.0.0(12)，可使用更高版本 SDK 编译但保留最低兼容 API 12。不承诺旧鸿蒙 Java UI、Android APK、跨进程共享控制器或所有设备形态行为一致。
 
 ## 2. 工程与职责
 
@@ -117,7 +117,7 @@ show / hide 可重复调用，cancel 幂等；cancel 后 show / move 返回 `DES
 
 示例 App 提供三种浮窗入口、位置/吸附/半隐藏开关、页面过滤演示及多实例管理。中文文档给出最短接入、生命周期接线、权限配置、API 对照和已验证设备/SDK 清单。
 
-初始检查时本机只有 Huawei OpenHarmony API 9 SDK，未发现 DevEco Studio。实施中已取得官方 OpenHarmony API 12 SDK 并构建早期骨架，但用户现已将最低版本改为 API 21；旧构建仅为历史记录，不能作为 API 21 目标的编译验收。实施时补齐或定位适用工具链；没有对应环境时，分别报告源码、核心测试、真实编译和设备验收状态，不用 TypeScript 或模拟测试替代 ArkTS/HAR 编译结论。
+初始检查时本机只有 Huawei OpenHarmony API 9 SDK，未发现 DevEco Studio。实施中已取得官方 OpenHarmony API 12 SDK 并完成早期骨架编译；用户最新确认最低兼容 API 12。该工具链可验证公开 API 12 的 ArkTS/HAR/HAP 编译，商业 HarmonyOS SDK 与设备验证仍分别报告。实施时补齐或定位适用工具链；没有对应环境时，分别报告源码、核心测试、真实编译和设备验收状态，不用 TypeScript 或模拟测试替代 ArkTS/HAR 编译结论。
 
 完成开发的标准是实现与测试满足本文契约；完成平台交付还须真实 SDK 构建与对应设备验收。受设备或权限条件阻塞的项目保持未验收，不标记为功能已通过。
 
