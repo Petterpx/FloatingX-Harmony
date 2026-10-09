@@ -4,7 +4,7 @@ import { FxPlatform, FxScope, FxEventType } from '../core/FxPlatform';
 import { FxController } from '../core/FxController';
 import { FxConfig } from '../core/FxConfig';
 import { FxError } from '../core/FxError';
-import { FxPoint, FxSize, FxViewport, FxProjection, FxDisplayMode, FxAnimationCurve } from '../core/FxTypes';
+import { FxPoint, FxSize, FxInsets, FxViewport, FxProjection, FxDisplayMode, FxAnimationCurve } from '../core/FxTypes';
 import { FxGeometryInput, initial, clamp, bounds, settle, project } from '../geometry/FxGeometry';
 import { FxContentSource, FxContentMount } from '../component/FxContent';
 import { FxTouch, FxPointer, FxTouchResult } from '../component/FxTouch';
@@ -79,10 +79,11 @@ export class FxScopePlatform implements FxPlatform {
     this.hostReady=false;
     // Wait for positive measured layout before restoring or showing.
   }
-  layoutHost(size: FxSize): void {
+  layoutHost(size: FxSize, insets: FxInsets = {left:0,top:0,right:0,bottom:0}): void {
     if(this.destroyed || size.width<=0 || size.height<=0) return;
     this.cancelAnimations(); this.cancelTouch();
     this.viewport.size={width:size.width,height:size.height};
+    this.viewport.insets={left:insets.left,top:insets.top,right:insets.right,bottom:insets.bottom};
     this.hostReady=true;
     if(this.created) this.attachContent();
     if(this.positioned) this.position=clamp(this.position,bounds(this.getGeometry()));

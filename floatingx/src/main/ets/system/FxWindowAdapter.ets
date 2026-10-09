@@ -36,7 +36,7 @@ export class FxSystemPageView implements FxSystemView {
   constructor(owner: FxSystemOwner, context: UIContext, source: FxContentSource, interactions: FxInteractions) {
     this.owner=owner;
     this.interactions=interactions;this.engine=new FxScopePlatform(interactions,new FxSystemBoundary(owner));
-    this.engine.mountHost(context,source);this.engine.layoutHost(owner.getGeometry().viewport.size);
+    this.engine.mountHost(context,source);this.engine.layoutHost(owner.getGeometry().viewport.size,owner.getGeometry().viewport.insets);
   }
   async create(): Promise<void> {await this.engine.create();this.owner.attachView(this);}
   bindController(controller: FxController): void {this.engine.bindController(controller,false);}
@@ -48,11 +48,17 @@ export class FxSystemPageView implements FxSystemView {
   }
   layoutContent(size: FxSize): void {this.engine.layoutContent(size);this.owner.layoutContent(size);}
   handleTouch(event: TouchEvent): void {if(event.type===TouchType.Down && !this.engine.hasPrimaryPointer())this.owner.cancelAnimations();this.engine.handleTouch(event);}
-  async applyConfig(config: FxConfig): Promise<void> {this.engine.layoutHost(this.owner.getGeometry().viewport.size);await this.engine.applyConfig(config);this.adoptPosition(this.owner.getPosition());}
+  async applyConfig(config: FxConfig): Promise<void> {this.engine.layoutHost(this.owner.getGeometry().viewport.size,this.owner.getGeometry().viewport.insets);await this.engine.applyConfig(config);this.adoptPosition(this.owner.getPosition());}
   show(): Promise<void> {return this.engine.show();} hide(): Promise<void> {return this.engine.hide();}
   async destroy(): Promise<void> {try{await this.engine.destroy();}finally{this.owner.detachView();}}
   cancelAnimations(): void {this.engine.cancelAnimations();this.engine.cancelTouch();}
-  adoptPosition(point: FxPoint): void {this.engine.adoptPosition(point);}
+  adoptPosition(point: FxPoint): void {
+    const target=this.owner.getGeometry().viewport;const current=this.engine.getGeometry().viewport;
+    if(target.size.width!==current.size.width || target.size.height!==current.size.height || target.insets.left!==current.insets.left || target.insets.top!==current.insets.top || target.insets.right!==current.insets.right || target.insets.bottom!==current.insets.bottom) {
+      this.engine.layoutHost(target.size,target.insets);
+    }
+    this.engine.adoptPosition(point);
+  }
 }
 interface FxWindowError extends Error {code?: number;}
 class FxWindowAdapter implements FxNativeWindow {
@@ -111,7 +117,14 @@ export class FxNativeWindowFactory implements FxWindowFactory {
   }
   async create(): Promise<FxNativeWindow> {
     const id='FloatingXSystem_'+(++instanceSequence).toString();
-    try {const native=await window.createWindow({name:id,windowType:window.WindowType.TYPE_FLOAT,ctx:this.context});return new FxWindowAdapter(native,id,this.source,this.interactions);}
-    catch(error) {const native=error as FxWindowError;if(native.code===201)throw new FxError('PERMISSION_DENIED',native.message,native.code);if(native.code===801)throw new FxError('CAPABILITY_UNSUPPORTED',native.message,native.code);throw new FxError('WINDOW_OPERATION_FAILED',native.message,native.code);}
+    let allocated: window.Window | undefined;
+    try {allocated=await window.createWindow({name:id,windowType:window.WindowType.TYPE_FLOAT,ctx:this.context});return new FxWindowAdapter(allocated,id,this.source,this.interactions);}
+    catch(error) {
+      if(allocated!==undefined) {
+        try{await allocated.destroyWindow();}
+        catch(cleanup){const native=cleanup as FxWindowError;throw new FxError('WINDOW_OPERATION_FAILED',native.message,native.code);}
+      }
+      const native=error as FxWindowError;if(native.code===201)throw new FxError('PERMISSION_DENIED',native.message,native.code);if(native.code===801)throw new FxError('CAPABILITY_UNSUPPORTED',native.message,native.code);throw new FxError('WINDOW_OPERATION_FAILED',native.message,native.code);
+    }
   }
 }

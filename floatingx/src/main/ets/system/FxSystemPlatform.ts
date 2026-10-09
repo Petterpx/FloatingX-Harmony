@@ -47,7 +47,7 @@ export class FxSystemPlatform implements FxPlatform {
       this.releaseNative=this.native.subscribe(() => {this.cancelAnimations();this.observe(this.move(this.position,false));});
       await this.native.load(this);await this.native.setBackground('#00000000');
       await this.native.setTouchable(this.input.config.displayMode!==FxDisplayMode.DisplayOnly);
-      await this.projectNative(initial(this.input));this.positioned=false;
+      await this.enqueueNative(async () => {await this.projectNative(initial(this.input));this.positioned=false;});
     } catch(error) {
       const cause=error as Error;await this.cleanupNative();
       if(!this.destroyed && this.fallbackFactory!==undefined && cause instanceof FxError && (cause.code==='PERMISSION_DENIED'||cause.code==='CAPABILITY_UNSUPPORTED')) {
@@ -64,9 +64,12 @@ export class FxSystemPlatform implements FxPlatform {
   }
   async applyConfig(config: FxConfig): Promise<void> {
     this.assertAlive();if(this.fallback!==undefined){await this.fallback.applyConfig(config);this.input.config=config.copy();return;}
-    const previous=this.input.config;const next=config.copy();this.input.config=next;
-    try {await this.requireNative().setTouchable(next.displayMode!==FxDisplayMode.DisplayOnly);await this.projectNative(this.positioned?clamp(this.position,bounds(this.input)):initial(this.input));if(this.view!==undefined)await this.view.applyConfig(next);}
-    catch(error){this.input.config=previous;try{await this.requireNative().setTouchable(previous.displayMode!==FxDisplayMode.DisplayOnly);}catch(_){}throw error as Error;}
+    const next=config.copy();this.cancelAnimations();
+    await this.enqueueNative(async () => {
+      this.assertAlive();const previous=this.input.config;this.input.config=next;
+      try {await this.requireNative().setTouchable(next.displayMode!==FxDisplayMode.DisplayOnly);await this.projectNative(this.positioned?clamp(this.position,bounds(this.input)):initial(this.input));if(this.view!==undefined)await this.view.applyConfig(next);}
+      catch(error){this.input.config=previous;try{await this.requireNative().setTouchable(previous.displayMode!==FxDisplayMode.DisplayOnly);}catch(_){}throw error as Error;}
+    });
   }
   async show(): Promise<void> {this.assertAlive();if(this.fallback!==undefined)return this.fallback.show();if(this.view!==undefined)await this.view.show();try{await this.requireNative().show();}catch(error){if(this.view!==undefined)await this.view.hide();throw error as Error;}}
   async hide(): Promise<void> {this.cancelAnimations();if(this.fallback!==undefined)return this.fallback.hide();if(this.native!==undefined){await this.native.hide();if(this.view!==undefined)await this.view.hide();}}
@@ -92,7 +95,14 @@ export class FxSystemPlatform implements FxPlatform {
   }
   private async drainFrames(): Promise<void> {while(this.pendingFrame!==undefined && !this.destroyed){const point=this.pendingFrame;this.pendingFrame=undefined;await this.runMove(point,false);}}
   cancelAnimations(): void {this.animation.cancel();this.clock.cancel();this.pendingFrame=undefined;if(this.view!==undefined)this.view.cancelAnimations();if(this.fallback!==undefined && this.fallback.cancelAnimations!==undefined)this.fallback.cancelAnimations();}
-  layoutContent(size: FxSize): void {if(this.destroyed || size.width<=0 || size.height<=0 || size.width===this.input.content.width && size.height===this.input.content.height)return;this.input.content={width:size.width,height:size.height};this.observe(this.move(this.position,false));}
+  layoutContent(size: FxSize): void {
+    if(this.destroyed || size.width<=0 || size.height<=0 || size.width===this.input.content.width && size.height===this.input.content.height)return;
+    const next: FxSize={width:size.width,height:size.height};this.cancelAnimations();
+    this.observe(this.enqueueNative(async () => {
+      if(this.destroyed)return;const previous=this.input.content;this.input.content=next;
+      try{await this.projectNative(this.position);}catch(error){this.input.content=previous;throw error as Error;}
+    }));
+  }
   reportError(error: Error): void {if(this.controller!==undefined)this.controller.reportError(error);}
   async destroy(): Promise<void> {
     if(this.destroyed)return;this.destroyed=true;this.cancelAnimations();
@@ -100,7 +110,10 @@ export class FxSystemPlatform implements FxPlatform {
     finally {if(this.releaseFallback!==undefined)this.releaseFallback();this.releaseFallback=undefined;this.controller=undefined;this.listeners=[];this.fallback=undefined;}
   }
   private enqueueProjection(point: FxPoint, token: number): Promise<void> {
-    const run=this.tail.then(async () => {if(!this.destroyed && this.animation.isCurrent(token))await this.projectNative(point,token);});this.tail=run.then(()=>{},()=>{});return run;
+    return this.enqueueNative(async () => {if(!this.destroyed && this.animation.isCurrent(token))await this.projectNative(point,token);});
+  }
+  private enqueueNative(operation: () => Promise<void>): Promise<void> {
+    const run=this.tail.then(operation);this.tail=run.then(()=>{},()=>{});return run;
   }
   private async projectNative(point: FxPoint, token?: number): Promise<void> {
     const native=this.requireNative();const viewport=native.getViewport();if(!Number.isFinite(viewport.density)||viewport.density<=0)throw new FxError('INVALID_GEOMETRY','Invalid target display density');
@@ -110,8 +123,10 @@ export class FxSystemPlatform implements FxPlatform {
     try {
       await native.resize(size);
       const actual=await native.movePx({x:Math.round(projection.position.x*d),y:Math.round(projection.position.y*d)});
+      if(this.destroyed || token!==undefined && !this.animation.isCurrent(token)) {
+        await native.resize({width:previous.width,height:previous.height});await native.movePx({x:previous.x,y:previous.y});return;
+      }
       if(actual.width!==size.width||actual.height!==size.height)throw new FxError('CAPABILITY_UNSUPPORTED','Native window cannot represent requested visible slice');
-      if(this.destroyed || token!==undefined && !this.animation.isCurrent(token))return;
       this.position={x:logical.x+(actual.x/d-projection.position.x),y:logical.y+(actual.y/d-projection.position.y)};
       this.positioned=true;this.projection={position:{x:actual.x/d,y:actual.y/d},visibleSize:projection.visibleSize,contentOffset:projection.contentOffset};
       if(this.view!==undefined)this.view.adoptPosition(this.position);
