@@ -65,12 +65,15 @@ export class FxWindowHost {
   dispose(): Promise<void> {
     if(this.disposal!==undefined) return this.disposal;
     this.valid=false; this.foreground=false; // Synchronous invalidation precedes every asynchronous cleanup.
-    this.notify();
     const controllers=this.controllers.slice(); this.controllers=[];
-    this.disposal=this.cleanup(controllers); return this.disposal;
+    let notificationFailure: Error | undefined;
+    // Cache the shared promise before user callbacks; reentrant disposal joins it.
+    // The microtask starts cleanup after all synchronous notifications have been attempted.
+    this.disposal=Promise.resolve().then(() => this.cleanup(controllers,notificationFailure));
+    try { this.notify(); } catch(error) { notificationFailure=error as Error; }
+    return this.disposal;
   }
-  private async cleanup(controllers: FxController[]): Promise<void> {
-    let failure: Error | undefined;
+  private async cleanup(controllers: FxController[], failure?: Error): Promise<void> {
     try {
       for(let i=0;i<controllers.length;i++) { try { await controllers[i].cancel(); } catch(error) { if(failure===undefined) failure=error as Error; } }
     } finally {
@@ -82,5 +85,11 @@ export class FxWindowHost {
     }
     if(failure!==undefined) throw failure;
   }
-  private notify(): void { const listeners=this.listeners.slice(); for(let i=0;i<listeners.length;i++) listeners[i](); }
+  private notify(): void {
+    const listeners=this.listeners.slice(); let failure: Error | undefined;
+    for(let i=0;i<listeners.length;i++) {
+      try { listeners[i](); } catch(error) { if(failure===undefined) failure=error as Error; }
+    }
+    if(failure!==undefined) throw failure;
+  }
 }

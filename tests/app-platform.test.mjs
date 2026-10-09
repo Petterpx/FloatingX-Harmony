@@ -91,3 +91,18 @@ test('configuration and programmatic move before layout wait for measured geomet
  await c.show();await c.updateConfig(new FxConfig({adsorb:false,position:{x:10,y:20}}));await c.move(70,90);assert.equal(saves.length,0);assert.equal(c.getX(),70);assert.equal(c.getY(),90);
  p.layoutHost({width:300,height:500});await c.setHostVisible(true);assert.equal(c.getX(),70);assert.equal(c.getY(),90);assert.equal(saves.length,1);assert.deepEqual(saves[0].viewport,{width:300,height:500});await host.dispose();
 });
+test('throwing invalidation subscriber cannot skip later subscribers or any owned disposal',async()=>{
+ const s=await setup();const otherSource=new ScopeContent();const otherPlatform=new FxAppPlatform(s.host,otherSource);const other=new FxController(otherPlatform,new FxConfig());otherPlatform.bindController(other);await other.show();otherPlatform.layoutHost({width:300,height:500});await other.setHostVisible(true);
+ const firstFailure=new Error('first invalidation subscriber');const secondFailure=new Error('second invalidation subscriber');let later=0;
+ s.host.subscribe(()=>{throw firstFailure;});s.host.subscribe(()=>{throw secondFailure;});s.host.subscribe(()=>{later++;});
+ let disposal;assert.doesNotThrow(()=>{disposal=s.host.dispose();});assert.equal(s.host.isValid(),false);assert.equal(later,1);
+ await assert.rejects(disposal,error=>{assert.equal(error,firstFailure);return true;});
+ assert.equal(s.c.getState(),'destroyed');assert.equal(other.getState(),'destroyed');assert.equal(s.source.disposals,1);assert.equal(otherSource.disposals,1);assert.equal(s.win.overlay.nodes.size,0);assert.equal(s.win.callbacks.size,0);
+ assert.deepEqual(s.win.offCalls.sort(),['avoidAreaChange','windowEvent','windowSizeChange']);
+});
+test('reentrant dispose returns established promise and cleanup is attempted exactly once',async()=>{
+ const s=await setup();let reentered;let calls=0;
+ s.host.subscribe(()=>{calls++;if(calls===1)reentered=s.host.dispose();});
+ const disposal=s.host.dispose();assert.equal(reentered,disposal);await disposal;
+ assert.equal(s.host.dispose(),disposal);assert.equal(calls,1);assert.equal(s.c.getState(),'destroyed');assert.equal(s.source.disposals,1);assert.equal(s.win.overlay.disposals,1);assert.equal(s.win.offCalls.length,3);
+});
