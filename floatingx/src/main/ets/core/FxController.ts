@@ -100,7 +100,7 @@ export class FxController {
         this.platform = undefined;
         this.state = FxState.DESTROYED;
       }
-    });
+    }, undefined, true);
     // Detach callback references after the final destroy/error notification.
     this.cancellation.then(() => { this.onEvent = undefined; }, () => { this.onEvent = undefined; });
     return this.cancellation;
@@ -212,19 +212,27 @@ export class FxController {
     return request.completion;
   }
 
-  private enqueue(operation: FxOperation, move?: FxMoveRequest): Promise<void> {
+  private enqueue(operation: FxOperation, move?: FxMoveRequest, cleanup: boolean = false): Promise<void> {
     if (move === undefined) this.pendingMove = undefined;
+    const generation = this.generation;
     const events: FxEvent[] = [];
+    const diagnostics: FxError[] = [];
     const result = this.tail.then(() => operation(events)).catch((error: Error) => {
       this.refreshState();
       const normalized = normalizeError(error);
-      events.push(this.event(FxEventType.ERROR, normalized));
-      throw normalized;
+      const canceled = !cleanup && (generation !== this.generation ||
+        this.state === FxState.DESTROYING || this.state === FxState.DESTROYED);
+      // Native failures remain diagnosable, while stale ordinary operations have
+      // one stable cancellation outcome. Cleanup retains its own destroy error.
+      if (canceled && normalized.code !== 'DESTROYED') diagnostics.push(normalized);
+      const outcome = canceled ? this.destroyedError() : normalized;
+      events.push(this.event(FxEventType.ERROR, outcome));
+      throw outcome;
     });
     // Recover the queue before dispatching user code. No callback is awaited.
     this.tail = result.then(() => {}, () => {});
-    return result.then(() => { this.dispatch(events); }, (error: Error) => {
-      this.dispatch(events); throw error;
+    return result.then(() => { this.dispatch(events, diagnostics); }, (error: Error) => {
+      this.dispatch(events, diagnostics); throw error;
     });
   }
 
@@ -260,7 +268,8 @@ export class FxController {
     this.scope = scope;
     return { type, position: { x: this.position.x, y: this.position.y }, actualScope: scope, error };
   }
-  private dispatch(events: FxEvent[]): void {
+  private dispatch(events: FxEvent[], diagnostics: FxError[] = []): void {
+    for (let i = 0; i < diagnostics.length; i++) this.log(diagnostics[i]);
     for (let i = 0; i < events.length; i++) {
       const event = events[i];
       if (event.error !== undefined && event.error.code !== 'DESTROYED') this.log(event.error);

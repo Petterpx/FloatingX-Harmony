@@ -8,7 +8,9 @@ const { FxController } = require('../work/core/core/FxController.js');
 const { FxRegistry } = require('../work/core/core/FxRegistry.js');
 const { FxError } = require('../work/core/core/FxError.js');
 
-function controller(platform = new FakePlatform()) { return new FxController(platform, new FxConfig()); }
+function controller(platform = new FakePlatform(), logged = []) {
+  return new FxController(platform, new FxConfig(), undefined, { error: error => logged.push(error) });
+}
 
 test('shared namespace rejects duplicate tags and missing lookup reports stable error', () => {
   const registry = new FxRegistry();
@@ -40,7 +42,8 @@ test('old instance unregister cannot remove replacement', () => {
 test('uninstall removes registration even when native destroy rejects', async () => {
   const registry = new FxRegistry();
   const platform = new FakePlatform();
-  const item = controller(platform);
+  const logged = [];
+  const item = controller(platform, logged);
   registry.register('floating', item);
   await item.show();
   platform.errors.set('destroy', new FxError('WINDOW_OPERATION_FAILED', 'destroy failure', 201));
@@ -48,6 +51,7 @@ test('uninstall removes registration even when native destroy rejects', async ()
   assert.equal(registry.controlOrNull('floating'), undefined);
   assert.equal(item.getState(), 'destroyed');
   await registry.uninstall('floating');
+  assert.deepEqual(logged.map(error => error.platformCode), [201]);
 });
 
 test('late uninstall completion preserves replacement identity', async () => {
@@ -74,7 +78,8 @@ test('uninstallAll starts every cleanup despite failure and waits for delayed re
   const slow = new FakePlatform();
   const good = new FakePlatform();
   const gate = deferred(); slow.gates.set('destroy', gate.promise);
-  const items = [controller(bad), controller(slow), controller(good)];
+  const logged = [];
+  const items = [controller(bad, logged), controller(slow), controller(good)];
   registry.register('bad', items[0]); registry.register('slow', items[1]); registry.register('good', items[2]);
   await Promise.all(items.map(v => v.show()));
   bad.errors.set('destroy', new FxError('WINDOW_OPERATION_FAILED', 'cannot destroy', 51));
@@ -88,6 +93,7 @@ test('uninstallAll starts every cleanup despite failure and waits for delayed re
   assert.equal((await observed).platformCode, 51);
   assert.deepEqual(registry.getAllTags(), []);
   assert.deepEqual(items.map(v => v.getState()), ['destroyed', 'destroyed', 'destroyed']);
+  assert.deepEqual(logged.map(error => error.platformCode), [51]);
 });
 
 test('uninstallAll snapshots registrations and preserves newly registered instances', async () => {

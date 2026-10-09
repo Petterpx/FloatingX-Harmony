@@ -55,7 +55,8 @@ test('show hide show preserve serialized native order and committed visibility',
 test('create and show failure recover to idle and hidden without poisoning queue', async () => {
   const platform = new FakePlatform();
   const events = [];
-  const controller = new FxController(platform, new FxConfig(), event => events.push(event));
+  const logged = [];
+  const controller = new FxController(platform, new FxConfig(), event => events.push(event), { error: error => logged.push(error) });
   platform.errors.set('create', new FxError('NO_HOST', 'no host'));
   await assert.rejects(controller.show(), { code: 'NO_HOST' });
   assert.equal(controller.getState(), 'idle');
@@ -69,11 +70,13 @@ test('create and show failure recover to idle and hidden without poisoning queue
   assert.equal(controller.isShow(), true);
   assert.equal(platform.calls.filter(v => v === 'create').length, 2);
   assert.deepEqual(events.filter(v => v.error).map(v => v.error.code), ['NO_HOST', 'PERMISSION_DENIED']);
+  assert.deepEqual(logged.map(error => error.code), ['NO_HOST', 'PERMISSION_DENIED']);
 });
 
 test('failed hide retains actual visibility and can be retried', async () => {
   const platform = new FakePlatform();
-  const controller = new FxController(platform, new FxConfig());
+  const logged = [];
+  const controller = new FxController(platform, new FxConfig(), undefined, { error: error => logged.push(error) });
   await controller.show();
   platform.errors.set('hide', new Error('hide failed'));
   await assert.rejects(controller.hide(), { code: 'WINDOW_OPERATION_FAILED' });
@@ -82,6 +85,7 @@ test('failed hide retains actual visibility and can be retried', async () => {
   platform.errors.delete('hide');
   await controller.hide();
   assert.equal(controller.getState(), 'hidden');
+  assert.deepEqual(logged.map(error => error.code), ['WINDOW_OPERATION_FAILED']);
 });
 
 test('host visibility retains show intent and never overrides explicit hide', async () => {
@@ -139,7 +143,8 @@ test('queued moves coalesce but visibility barriers retain order', async () => {
 
 test('all coalesced callers reject on native failure and later moves still run', async () => {
   const platform = new FakePlatform();
-  const controller = new FxController(platform, new FxConfig());
+  const logged = [];
+  const controller = new FxController(platform, new FxConfig(), undefined, { error: error => logged.push(error) });
   await controller.show();
   platform.errors.set('move', new Error('bad move'));
   const results = await Promise.allSettled([controller.move(4, 5), controller.move(6, 7)]);
@@ -148,6 +153,7 @@ test('all coalesced callers reject on native failure and later moves still run',
   platform.errors.delete('move');
   await controller.move(8, 9);
   assert.equal(controller.getX(), 8);
+  assert.deepEqual(logged.map(error => error.code), ['WINDOW_OPERATION_FAILED']);
 });
 
 test('cancel prevents late move writeback and destroys once', async () => {
@@ -170,7 +176,8 @@ test('cancel prevents late move writeback and destroys once', async () => {
 test('native destroy failure still clears local state, emits error and rejects repeated cancel consistently', async () => {
   const platform = new FakePlatform();
   const events = [];
-  const controller = new FxController(platform, new FxConfig(), event => events.push(event));
+  const logged = [];
+  const controller = new FxController(platform, new FxConfig(), event => events.push(event), { error: error => logged.push(error) });
   await controller.show();
   platform.errors.set('destroy', new FxError('WINDOW_OPERATION_FAILED', 'destroy failed', 44));
   await assert.rejects(controller.cancel(), { code: 'WINDOW_OPERATION_FAILED', platformCode: 44 });
@@ -179,6 +186,7 @@ test('native destroy failure still clears local state, emits error and rejects r
   await assert.rejects(controller.cancel(), { code: 'WINDOW_OPERATION_FAILED' });
   assert.equal(platform.calls.filter(v => v === 'destroy').length, 1);
   assert.equal(events.at(-1).error.platformCode, 44);
+  assert.deepEqual(logged.map(error => error.platformCode), [44]);
 });
 
 test('event callback can cancel reentrantly and callback throws are sent only to logger', async () => {
@@ -209,7 +217,8 @@ test('throwing logger cannot interrupt queue or cleanup', async () => {
 
 test('config updates own copies, defer native calls until creation and commit after success', async () => {
   const platform = new FakePlatform();
-  const controller = new FxController(platform, new FxConfig());
+  const logged = [];
+  const controller = new FxController(platform, new FxConfig(), undefined, { error: error => logged.push(error) });
   const update = new FxConfig({ position: { x: 11, y: 12 } });
   const updating = controller.updateConfig(update);
   update.position.x = 99;
@@ -224,6 +233,7 @@ test('config updates own copies, defer native calls until creation and commit af
   platform.errors.delete('applyConfig');
   await controller.moveByVector(1, 1);
   assert.equal(controller.getX(), 12);
+  assert.deepEqual(logged.map(error => error.code), ['WINDOW_OPERATION_FAILED']);
 });
 
 test('initial and host layout positions are read from platform snapshots', async () => {
@@ -261,7 +271,9 @@ test('invalid move inputs reject before accessing native resources', async () =>
 
 test('initial config failure is retried before showing the created resource', async () => {
   const platform = new FakePlatform();
-  const controller = new FxController(platform, new FxConfig({ position: { x: 12, y: 13 } }));
+  const logged = [];
+  const controller = new FxController(platform, new FxConfig({ position: { x: 12, y: 13 } }), undefined,
+    { error: error => logged.push(error) });
   platform.errors.set('applyConfig', new Error('initial layout failed'));
   await assert.rejects(controller.show(), { code: 'WINDOW_OPERATION_FAILED' });
   assert.equal(controller.getState(), 'hidden');
@@ -270,6 +282,7 @@ test('initial config failure is retried before showing the created resource', as
   assert.equal(controller.getX(), 12);
   assert.equal(controller.getY(), 13);
   assert.deepEqual(platform.calls, ['create', 'applyConfig', 'applyConfig', 'show']);
+  assert.deepEqual(logged.map(error => error.code), ['WINDOW_OPERATION_FAILED']);
 });
 
 test('cancel during in-flight show rejects stale completion and suppresses show event', async () => {
@@ -317,3 +330,43 @@ test('position getter failure retains last snapshot and destroyed controller sto
   assert.equal(controller.getY(), 4);
   assert.equal(reads, 1);
 });
+
+const lateFailureScenarios = [
+  { stage: 'create', method: 'create', operation: 'show', ready: false, destroys: 0 },
+  { stage: 'initial config', method: 'applyConfig', operation: 'show', ready: false, destroys: 1 },
+  { stage: 'config update', method: 'applyConfig', operation: 'updateConfig', ready: true, destroys: 1 },
+  { stage: 'show', method: 'show', operation: 'show', ready: false, destroys: 1 },
+  { stage: 'move', method: 'move', operation: 'move', ready: true, destroys: 1 }
+];
+for (const scenario of lateFailureScenarios) {
+  test(`cancel wins over late native ${scenario.stage} rejection`, async () => {
+    const platform = new FakePlatform();
+    const logged = [];
+    const events = [];
+    const controller = new FxController(platform, new FxConfig(), event => events.push(event),
+      { error: error => logged.push(error) });
+    if (scenario.ready) await controller.show();
+    events.length = 0;
+    const gate = deferred();
+    const started = deferred();
+    const nativeMethod = platform[scenario.method].bind(platform);
+    platform[scenario.method] = (...args) => { started.resolve(); return nativeMethod(...args); };
+    platform.gates.set(scenario.method, gate.promise);
+    const nativeError = new FxError('PERMISSION_DENIED', 'late native rejection', 201);
+    const operation = scenario.operation === 'move' ? controller.move(50, 60) :
+      scenario.operation === 'updateConfig' ? controller.updateConfig(new FxConfig({ position: { x: 10, y: 20 } })) :
+        controller.show();
+    const observed = operation.catch(error => error);
+    await started.promise;
+    const cancelled = controller.cancel();
+    gate.reject(nativeError);
+    const error = await observed;
+    await cancelled;
+    assert.equal(error.code, 'DESTROYED');
+    assert.equal(controller.getState(), 'destroyed');
+    assert.equal(controller.isShow(), false);
+    assert.equal(platform.calls.filter(v => v === 'destroy').length, scenario.destroys);
+    assert.deepEqual(logged, [nativeError]);
+    assert.deepEqual(events.filter(v => v.error).map(v => v.error.code), ['DESTROYED']);
+  });
+}
