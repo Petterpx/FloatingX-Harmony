@@ -24,7 +24,7 @@ system 实现不等于普通手机/平板可用。[华为 V5 受限权限文档]
 
 ## scope：局部宿主
 
-[ScopeDemo.ets](entry/src/main/ets/pages/ScopeDemo.ets) 在组件里创建 typed 控制器，`aboutToAppear` 调 show，`aboutToDisappear` 调 cancel。Host 的 host Builder 是底层页面内容：
+[ScopeDemo.ets](entry/src/main/ets/pages/ScopeDemo.ets) 在组件里创建 typed 控制器，`aboutToAppear` 调 show，`aboutToDisappear` 通过 `DemoPageOwner.close()` 同步失效重建请求并取消全部已取得句柄。Host 的 host Builder 是底层页面内容：
 
 ```ts
   private createControl(): FxControl<ScopeContentParams> { return FloatingX.createScope({
@@ -32,7 +32,7 @@ system 实现不等于普通手机/平板可用。[华为 V5 受限权限文档]
     config:this.config,
     storage:{namespace:'demo',key:'scope',storage:new FxMemoryStorage()},
     interactions:{dragArea:{x:0,y:0,width:220,height:48},onClick:() => {this.message='标题点击';},onLongPress:() => {this.message='标题长按';}},
-    events:(event) => {if(event.error!==undefined)this.message=event.error.code+': '+event.error.message;}
+    events:(event) => {if(this.pageOwner.isActive() && event.error!==undefined)this.message=event.error.code+': '+event.error.message;}
   }); }
 ```
 
@@ -66,7 +66,7 @@ router 页面和 Navigation destination 都应向该 Host 调 `setPage(name)`；
       content:new FxContent(wrapBuilder(systemContent),new SystemContentParams(() => {if(this.control!==undefined)this.run(this.control.cancel());}),{width:220,height:90}),
       size:{width:220,height:90},config:new FxConfig({position:{x:20,y:100},adsorb:false}),
       fallback:fallback,interactions:{dragArea:{x:0,y:0,width:220,height:40}},
-      events:(event) => {this.message='actualScope='+event.actualScope+(event.error===undefined?'':'; '+event.error.code+': '+event.error.message);}});
+      events:(event) => {if(this.pageOwner.isActive())this.message='actualScope='+event.actualScope+(event.error===undefined?'':'; '+event.error.code+': '+event.error.message);}});
 ```
 
 未启用 fallback 时不需要 app WindowHost。例子先验证 `fallback.host`，再创建 system 控制器；降级只处理权限/能力失败，先清理原系统资源，并以事件的 `actualScope` 和 error 告知原因。系统实例的 UIAbility 拥有者单独保存并取消自己的句柄，见 [DemoOwner](entry/src/main/ets/entryability/DemoOwner.ets)。
@@ -94,7 +94,7 @@ API12 无公开原生窗口 hide：system hide 隐藏内容、保持透明窗口
 
 [ScopeDemo](entry/src/main/ets/pages/ScopeDemo.ets) 包含九宫格重建定位、六种吸附方向/开关、回弹、半隐藏比例 0..0.9、三显示模式、显隐动画/移动、向量移动、同节点内容更新、点击/长按、状态读取、存储清除、宿主重挂和终止。
 
-[AppDemo](entry/src/main/ets/pages/AppDemo.ets) 包含 router / Navigation 页面黑名单、原生 Dialog 层级及底层按钮。[MultipleDemo](entry/src/main/ets/pages/MultipleDemo.ets) 包含多个 tag、白名单、Preferences 保存、重复 tag、查找、逐项/全部卸载及日志注入。[SystemDemo](entry/src/main/ets/pages/SystemDemo.ets) 包含默认拒绝、显式降级、DisplayOnly、hide/show 与关闭入口。每个创建入口都有 cancel 及拥有者退出清理。
+[AppDemo](entry/src/main/ets/pages/AppDemo.ets) 包含 router / Navigation 页面黑名单、原生 Dialog 层级及底层按钮。[MultipleDemo](entry/src/main/ets/pages/MultipleDemo.ets) 包含多个 tag、白名单、Preferences 保存、重复 tag、查找、逐项/全部卸载及日志注入。[SystemDemo](entry/src/main/ets/pages/SystemDemo.ets) 包含默认拒绝、显式降级、DisplayOnly、hide/show 与关闭入口。每个创建入口都有 cancel 及拥有者退出清理。`DemoPageOwner` 以页面世代和串行重建队列防止退出/并发重建后迟到创建；每次 await 后核验，已分配的过期结果立即取消。重复 tag 演示先要求该 tag 属于本页面，未创建或卸载后点击仅提示先创建。
 
 `Normal` 可移动和点击；`ClickOnly` 禁止移动；`DisplayOnly` 禁止内容交互并透传。通过 `interactions.dragArea` 划定标题拖动区，给子按钮留下原生交互区域。空白浮层透传、手势不误触及 Dialog 层级须设备验证。
 

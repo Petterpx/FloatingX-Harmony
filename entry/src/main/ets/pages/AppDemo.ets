@@ -1,4 +1,5 @@
 import { FloatingX, FxWindowHost, FxContent, FxControl, FxConfig, FxMemoryStorage } from 'floatingx';
+import { DemoPageOwner } from '../entryability/DemoOwner';
 class AppContentParams {
   close: () => void;
   button: () => void;
@@ -16,11 +17,12 @@ export struct AppDemo {
   @LocalStorageLink('fxHostReady') @Watch('hostReady') private ready: boolean = false;
   @State private message: string = '等待主窗口加载';
   private host?: FxWindowHost;
+  private pageOwner: DemoPageOwner = new DemoPageOwner();
   private controller?: FxControl<AppContentParams>;
   private paths: NavPathStack = new NavPathStack();
-  aboutToAppear(): void { this.hostReady(); }
+  aboutToAppear(): void {this.pageOwner.activate();this.hostReady();}
   private hostReady(): void {
-    if(this.controller!==undefined || !this.ready) return;
+    if(!this.pageOwner.isActive() || this.controller!==undefined || !this.ready) return;
     const host=this.getUIContext().getSharedLocalStorage()?.get<FxWindowHost>('fxWindowHost');
     if(host===undefined || !host.isValid()) return;
     this.host=host; host.setPage('Home');
@@ -32,11 +34,12 @@ export struct AppDemo {
       pagePolicy:{mode:'blacklist',names:['Blocked']},
       storage:{namespace:'demo',storage:new FxMemoryStorage()},
       interactions:{dragArea:{x:0,y:0,width:240,height:40}}});
+    if(!this.pageOwner.hold(controller))return;
     this.controller=controller;
     this.message='API 12 应用内浮窗'; this.run(controller.show());
   }
-  aboutToDisappear(): void {if(this.controller!==undefined)this.run(this.controller.cancel());}
-  private run(promise: Promise<void>): void { promise.catch((error: Error) => { this.message=error.message; }); }
+  aboutToDisappear(): void {this.run(this.pageOwner.close());}
+  private run(promise: Promise<void>): void { promise.catch((error: Error) => {if(this.pageOwner.isActive())this.message=error.message;}); }
   @Builder
   destination(name: string) {
     NavDestination() {

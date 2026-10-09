@@ -1,5 +1,6 @@
 import { FloatingX, FxContent, FxControl, FxConfig, FloatingXHost,
   FxGravity, FxEdgeAdsorb, FxDisplayMode, FxAnimationCurve, FxMemoryStorage } from 'floatingx';
+import { DemoPageOwner } from '../entryability/DemoOwner';
 class ScopeContentParams {
   label: string; onButton: () => void;
   constructor(label: string,onButton: () => void) { this.label=label;this.onButton=onButton; }
@@ -22,21 +23,23 @@ export struct ScopeDemo {
   private config: FxConfig = new FxConfig({animation:{enabled:true,durationMs:300,curve:FxAnimationCurve.EASE}});
   // README scope snippet: this typed result owns updateContent parameter checking.
   @State private instance: number = 0;
+  private pageOwner: DemoPageOwner = new DemoPageOwner();
   private control: FxControl<ScopeContentParams> = this.createControl();
   private createControl(): FxControl<ScopeContentParams> { return FloatingX.createScope({
     content:new FxContent(wrapBuilder(scopeContent),new ScopeContentParams('拖动标题 / 点击 / 长按',() => {this.message='内按钮点击';}),{width:220,height:110}),
     config:this.config,
     storage:{namespace:'demo',key:'scope',storage:new FxMemoryStorage()},
     interactions:{dragArea:{x:0,y:0,width:220,height:48},onClick:() => {this.message='标题点击';},onLongPress:() => {this.message='标题长按';}},
-    events:(event) => {if(event.error!==undefined)this.message=event.error.code+': '+event.error.message;}
+    events:(event) => {if(this.pageOwner.isActive() && event.error!==undefined)this.message=event.error.code+': '+event.error.message;}
   }); }
-  private async place(gravity: FxGravity): Promise<void> {
-    await this.control.cancel();this.config.gravity=gravity;this.config.position=undefined;
-    this.control=this.createControl();this.instance++;await this.control.show();
+  private place(gravity: FxGravity): Promise<void> {
+    return this.pageOwner.replace([() => {
+      this.config.gravity=gravity;this.config.position=undefined;return this.createControl();
+    }],(controls: FxControl<ScopeContentParams>[]) => {this.control=controls[0];this.instance++;});
   }
-  aboutToAppear(): void { this.run(this.control.show()); }
-  aboutToDisappear(): void { this.run(this.control.cancel()); }
-  private run(promise: Promise<void>): void { promise.catch((error: Error) => { this.message=error.message; }); }
+  aboutToAppear(): void {this.pageOwner.activate([this.control]);this.run(this.control.show());}
+  aboutToDisappear(): void {this.run(this.pageOwner.close());}
+  private run(promise: Promise<void>): void {promise.catch((error: Error) => {if(this.pageOwner.isActive())this.message=error.message;});}
   @Builder
   hostContent() { Column() {Text(this.message);Button('浮窗外按钮').onClick(() => {this.message='外按钮点击';})}.width('100%').height('100%').justifyContent(FlexAlign.End).padding(16) }
   build() {

@@ -1,6 +1,6 @@
 import common from '@ohos.app.ability.common';
 import { FloatingX, FxWindowHost, FxContent, FxControl, FxConfig, FxDisplayMode, FxSystemFallback } from 'floatingx';
-import { DemoOwner } from '../entryability/DemoOwner';
+import { DemoOwner, DemoPageOwner } from '../entryability/DemoOwner';
 class SystemContentParams {close: () => void;constructor(close: () => void) {this.close=close;}}
 @Builder
 function systemContent(params: SystemContentParams) {
@@ -9,9 +9,13 @@ function systemContent(params: SystemContentParams) {
 @Component
 export struct SystemDemo {
   @State private message: string = '商业 HarmonyOS V5 限批准的 2in1 场景；手机/平板系统权限未验收';
+  private pageOwner: DemoPageOwner = new DemoPageOwner();
   private control?: FxControl<SystemContentParams>;
-  private async open(allowFallback: boolean): Promise<void> {
-    if(this.control!==undefined)await this.control.cancel();
+  private open(allowFallback: boolean): Promise<void> {
+    return this.pageOwner.replace([() => this.createSystemControl(allowFallback)],
+      (controls: FxControl<SystemContentParams>[]) => {this.control=controls[0];});
+  }
+  private createSystemControl(allowFallback: boolean): FxControl<SystemContentParams> {
     let fallback: FxSystemFallback | undefined;
     if(allowFallback) {
       const host=this.getUIContext().getSharedLocalStorage()?.get<FxWindowHost>('fxWindowHost');
@@ -24,12 +28,13 @@ export struct SystemDemo {
       content:new FxContent(wrapBuilder(systemContent),new SystemContentParams(() => {if(this.control!==undefined)this.run(this.control.cancel());}),{width:220,height:90}),
       size:{width:220,height:90},config:new FxConfig({position:{x:20,y:100},adsorb:false}),
       fallback:fallback,interactions:{dragArea:{x:0,y:0,width:220,height:40}},
-      events:(event) => {this.message='actualScope='+event.actualScope+(event.error===undefined?'':'; '+event.error.code+': '+event.error.message);}});
+      events:(event) => {if(this.pageOwner.isActive())this.message='actualScope='+event.actualScope+(event.error===undefined?'':'; '+event.error.code+': '+event.error.message);}});
     this.getUIContext().getSharedLocalStorage()?.get<DemoOwner>('fxSystemOwner')?.add(control);
-    this.control=control;await control.show();
+    return control;
   }
-  aboutToDisappear(): void {if(this.control!==undefined)this.run(this.control.cancel());}
-  private run(promise: Promise<void>): void {promise.catch((error: Error) => {this.message=error.message;});}
+  aboutToAppear(): void {this.pageOwner.activate();}
+  aboutToDisappear(): void {this.run(this.pageOwner.close());}
+  private run(promise: Promise<void>): void {promise.catch((error: Error) => {if(this.pageOwner.isActive())this.message=error.message;});}
   build() {Column({space:12}) {
     Text(this.message)
     Button('显示系统浮窗（不降级）').onClick(() => this.run(this.open(false)))
