@@ -370,3 +370,37 @@ for (const scenario of lateFailureScenarios) {
     assert.deepEqual(events.filter(v => v.error).map(v => v.error.code), ['DESTROYED']);
   });
 }
+
+class LifecyclePlatform extends FakePlatform {
+ host = false; listener; interruptions=0;
+ isHostVisible() { return this.host; }
+ subscribeLifecycle(listener) { this.listener=listener; return ()=>{this.listener=undefined;}; }
+ cancelAnimations() { this.interruptions++; }
+ attach() { this.host=true; this.listener?.('attach'); }
+ detach() { this.host=false; this.listener?.('detach'); }
+ async create() { await super.create(); this.attach(); }
+ async destroy() { this.detach(); await super.destroy(); }
+}
+test('unmounted show keeps intent; actual attach/detach deduplicate and remount restores',async()=>{
+ const p=new LifecyclePlatform(); const events=[]; const c=new FxController(p,new FxConfig(),e=>events.push(e.type));
+ await c.show(); assert.equal(c.isShow(),false); assert.deepEqual(p.calls,[]);
+ p.host=true; await c.setHostVisible(true); assert.deepEqual(events,['attach','show']);
+ p.detach(); p.detach(); assert.equal(c.isShow(),false);
+ assert.deepEqual(events,['attach','show','hide','detach']);
+ p.attach(); p.attach(); await c.setHostVisible(true);
+ assert.equal(c.isShow(),true); assert.deepEqual(events,['attach','show','hide','detach','attach','show']);
+ await c.cancel(); p.attach(); assert.equal(c.isShow(),false);
+ assert.deepEqual(events.slice(-3),['hide','detach','destroy']);
+});
+test('host disappears while native show is pending: no late visible event',async()=>{
+ const p=new LifecyclePlatform(); p.host=true; const gate=deferred(); p.gates.set('show',gate.promise);
+ const events=[]; const c=new FxController(p,new FxConfig(),e=>events.push(e.type));
+ const showing=c.show(); await p.createStarted.promise; await Promise.resolve(); await Promise.resolve();
+ p.detach(); gate.resolve(); await showing;
+ assert.equal(c.isShow(),false); assert.equal(events.includes('show'),false);
+});
+test('hide and cancel interrupt animations at invocation before queued work',async()=>{
+ const p=new LifecyclePlatform(); const c=new FxController(p,new FxConfig());
+ const hiding=c.hide(); assert.equal(p.interruptions,1); await hiding;
+ const cancel=c.cancel(); assert.equal(p.interruptions,2); await cancel;
+});

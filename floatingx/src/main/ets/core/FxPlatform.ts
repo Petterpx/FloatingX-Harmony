@@ -8,7 +8,7 @@ export enum FxState {
   DESTROYING = 'destroying', DESTROYED = 'destroyed'
 }
 export enum FxEventType {
-  SHOW = 'show', HIDE = 'hide', MOVE = 'move', CONFIG = 'config', DESTROY = 'destroy', ERROR = 'error'
+  ATTACH = 'attach', DETACH = 'detach', SHOW = 'show', HIDE = 'hide', MOVE = 'move', CONFIG = 'config', DESTROY = 'destroy', ERROR = 'error'
 }
 export interface FxEvent {
   type: FxEventType;
@@ -33,4 +33,9 @@ export interface FxPlatform {
   destroy(): Promise<void>;
   /** Logical vp position after native clamping, initial placement or host layout. */
   getPosition?(): FxPoint;
+  /** Actual resource attachment, independent of user show intent. */
+  subscribeLifecycle?(listener: (type: FxEventType) => void): () => void;
+  isHostVisible?(): boolean;
+  /** Must resolve interrupted native animation promises; called before queueing hide/cancel/move. */
+  cancelAnimations?(): void;
 }

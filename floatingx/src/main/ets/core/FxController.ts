@@ -54,6 +54,8 @@ export class FxController {
   private geometry?: () => FxGeometryInput;
   private showRequested: boolean = false;
   private restorationDone: boolean = false;
+  private attached: boolean = false;
+  private releaseLifecycle?: () => void;
 
   constructor(platform: FxPlatform, config: FxConfig, onEvent?: FxEventCallback, logger?: FxLogger) {
     this.platform = platform;
@@ -61,6 +63,10 @@ export class FxController {
     this.onEvent = onEvent;
     this.logger = logger === undefined ? new FxConsoleLogger() : logger;
     this.scope = platform.actualScope === undefined ? FxScope.SCOPE : platform.actualScope;
+    if (platform.isHostVisible !== undefined) this.hostVisible = platform.isHostVisible();
+    if (platform.subscribeLifecycle !== undefined) {
+      this.releaseLifecycle = platform.subscribeLifecycle((type: FxEventType) => this.lifecycle(type));
+    }
   }
 
   show(): Promise<void> {
@@ -74,6 +80,7 @@ export class FxController {
   }
 
   hide(): Promise<void> {
+    this.interruptAnimations();
     const generation = this.generation;
     return this.enqueue(async (events: FxEvent[]) => {
       this.assertAlive(generation);
@@ -83,25 +90,34 @@ export class FxController {
   }
 
   setHostVisible(visible: boolean): Promise<void> {
+    if (this.state === FxState.DESTROYING || this.state === FxState.DESTROYED) return Promise.reject(this.destroyedError());
+    if (!visible) this.interruptAnimations();
+    // Physical host state is immediate; queued earlier notifications must never resurrect it.
+    this.hostVisible = visible;
     const generation = this.generation;
     return this.enqueue(async (events: FxEvent[]) => {
       this.assertAlive(generation);
-      this.hostVisible = visible;
       await this.reconcileVisibility(generation, events);
     });
   }
 
   cancel(): Promise<void> {
     if (this.cancellation !== undefined) return this.cancellation;
+    this.interruptAnimations();
     this.generation++;
     if (this.positionSession !== undefined) this.positionSession.close();
     this.wanted = false;
     this.state = FxState.DESTROYING;
     this.cancellation = this.enqueue(async (events: FxEvent[]) => {
       try {
-        if (this.created && this.platform !== undefined) await this.platform.destroy();
+        if ((this.created || this.releaseLifecycle !== undefined) && this.platform !== undefined) await this.platform.destroy();
+        if (this.visible && this.releaseLifecycle !== undefined) events.push(this.event(FxEventType.HIDE));
+        if (this.attached) events.push(this.event(FxEventType.DETACH));
         events.push(this.event(FxEventType.DESTROY));
       } finally {
+        if (this.releaseLifecycle !== undefined) this.releaseLifecycle();
+        this.releaseLifecycle = undefined;
+        this.attached = false;
         this.created = false;
         this.configured = false;
         this.visible = false;
@@ -233,7 +249,10 @@ export class FxController {
         }
       }
       this.assertAlive(generation);
+      if (!this.hostVisible) return;
       await platform.show();
+      this.assertAlive(generation);
+      if (!this.hostVisible) { await platform.hide(); return; }
       this.visible = true;
       this.assertAlive(generation);
       this.readPosition();
@@ -246,6 +265,7 @@ export class FxController {
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       return Promise.reject(new FxError('INVALID_GEOMETRY', 'Move coordinates must be finite'));
     }
+    this.interruptAnimations();
     if (this.positionSession !== undefined) this.positionSession.markUserMove();
     const pending = this.pendingMove;
     if (pending !== undefined && pending.completion !== undefined) {
@@ -305,6 +325,28 @@ export class FxController {
     return result.then(() => { this.dispatch(events, diagnostics); }, (error: Error) => {
       this.dispatch(events, diagnostics); throw error;
     });
+  }
+
+  /** Internal asynchronous UI callback failures share the controller error channel. */
+  reportError(error: Error): void { this.dispatch([this.event(FxEventType.ERROR, normalizeError(error))]); }
+
+  private interruptAnimations(): void {
+    if (this.platform !== undefined && this.platform.cancelAnimations !== undefined) this.platform.cancelAnimations();
+  }
+  private lifecycle(type: FxEventType): void {
+    if (this.state === FxState.DESTROYING || this.state === FxState.DESTROYED) return;
+    if (type === FxEventType.ATTACH && !this.attached) {
+      this.attached = true; this.hostVisible = true;
+      this.dispatch([this.event(FxEventType.ATTACH)]);
+      this.setHostVisible(true).catch(() => {});
+    } else if (type === FxEventType.DETACH && this.attached) {
+      this.interruptAnimations();
+      this.attached = false; this.hostVisible = false;
+      const events: FxEvent[] = [];
+      if (this.visible) { this.visible = false; events.push(this.event(FxEventType.HIDE)); }
+      events.push(this.event(FxEventType.DETACH));
+      this.refreshState(); this.dispatch(events);
+    }
   }
 
   private assertAlive(generation: number): void {
