@@ -55,6 +55,7 @@ export class FxController {
   private showRequested: boolean = false;
   private restorationDone: boolean = false;
   private attached: boolean = false;
+  private attachmentEpoch: number = 0;
   private releaseLifecycle?: () => void;
 
   constructor(platform: FxPlatform, config: FxConfig, onEvent?: FxEventCallback, logger?: FxLogger) {
@@ -93,6 +94,7 @@ export class FxController {
     if (this.state === FxState.DESTROYING || this.state === FxState.DESTROYED) return Promise.reject(this.destroyedError());
     if (!visible) this.interruptAnimations();
     // Physical host state is immediate; queued earlier notifications must never resurrect it.
+    if (this.hostVisible !== visible) this.attachmentEpoch++;
     this.hostVisible = visible;
     const generation = this.generation;
     return this.enqueue(async (events: FxEvent[]) => {
@@ -111,10 +113,12 @@ export class FxController {
     this.cancellation = this.enqueue(async (events: FxEvent[]) => {
       try {
         if ((this.created || this.releaseLifecycle !== undefined) && this.platform !== undefined) await this.platform.destroy();
-        if (this.visible && this.releaseLifecycle !== undefined) events.push(this.event(FxEventType.HIDE));
+      } finally {
+        // Adapter destroy must release local resources even when native disposal rejects.
+        // Lifecycle callbacks are suppressed during cancellation, so commit cleanup here.
+        if (this.releaseLifecycle !== undefined) this.commitVisibility(false, events);
         if (this.attached) events.push(this.event(FxEventType.DETACH));
         events.push(this.event(FxEventType.DESTROY));
-      } finally {
         if (this.releaseLifecycle !== undefined) this.releaseLifecycle();
         this.releaseLifecycle = undefined;
         this.attached = false;
@@ -207,10 +211,8 @@ export class FxController {
     if (!shouldShow) {
       if (this.visible) {
         await this.requirePlatform().hide();
-        this.visible = false;
-        this.refreshState();
         this.assertAlive(generation);
-        events.push(this.event(FxEventType.HIDE));
+        this.commitVisibility(false, events);
       }
       return;
     }
@@ -250,13 +252,17 @@ export class FxController {
       }
       this.assertAlive(generation);
       if (!this.hostVisible) return;
+      const attachmentEpoch = this.attachmentEpoch;
       await platform.show();
       this.assertAlive(generation);
       if (!this.hostVisible) { await platform.hide(); return; }
-      this.visible = true;
-      this.assertAlive(generation);
+      if (attachmentEpoch !== this.attachmentEpoch) {
+        // A replacement content mount needs its own show; the old completion owns no visibility.
+        await this.reconcileVisibility(generation, events);
+        return;
+      }
       this.readPosition();
-      events.push(this.event(FxEventType.SHOW));
+      this.commitVisibility(true, events);
     } finally { this.refreshState(); }
   }
 
@@ -336,17 +342,26 @@ export class FxController {
   private lifecycle(type: FxEventType): void {
     if (this.state === FxState.DESTROYING || this.state === FxState.DESTROYED) return;
     if (type === FxEventType.ATTACH && !this.attached) {
+      this.attachmentEpoch++;
       this.attached = true; this.hostVisible = true;
       this.dispatch([this.event(FxEventType.ATTACH)]);
       this.setHostVisible(true).catch(() => {});
     } else if (type === FxEventType.DETACH && this.attached) {
+      this.attachmentEpoch++;
       this.interruptAnimations();
       this.attached = false; this.hostVisible = false;
       const events: FxEvent[] = [];
-      if (this.visible) { this.visible = false; events.push(this.event(FxEventType.HIDE)); }
+      this.commitVisibility(false, events);
       events.push(this.event(FxEventType.DETACH));
       this.refreshState(); this.dispatch(events);
     }
+  }
+
+  private commitVisibility(visible: boolean, events: FxEvent[]): void {
+    if (this.visible === visible) return;
+    this.visible = visible;
+    this.refreshState();
+    events.push(this.event(visible ? FxEventType.SHOW : FxEventType.HIDE));
   }
 
   private assertAlive(generation: number): void {

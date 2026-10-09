@@ -108,3 +108,31 @@ test('unmount captures native dispose error and releases source for remount',asy
  assert.equal(errors.length,1); p.mountHost(new ScopeContext(),new ScopeContent()); p.layoutHost({width:300,height:500});
  await c.setHostVisible(true); assert.equal(c.isShow(),true); await c.cancel();
 });
+
+test('replacement host during show animation receives a fresh show and consistent actual visibility',async()=>{
+ const p=new FxScopePlatform(); const events=[]; const c=new FxController(p,new FxConfig({animation:{enabled:true,durationMs:300,curve:'ease'}}),e=>events.push(e.type),{error(){}}); p.bindController(c);
+ const content=new ScopeContent(); const first=new ScopeContext(); p.mountHost(first,content); p.layoutHost({width:300,height:500});
+ const showing=c.show(); for(let i=0;i<16;i++) await Promise.resolve(); assert.equal(first.finishes.length,1);
+ p.unmountHost(); const replacement=new ScopeContext(); p.mountHost(replacement,content); p.layoutHost({width:300,height:500});
+ for(let i=0;i<16;i++) await Promise.resolve();
+ assert.equal(replacement.finishes.length,1,'replacement content needs its own show animation');
+ assert.equal(c.isShow(),false,'old-host completion cannot commit visible');
+ first.finishes[0](); replacement.finishes[0](); await showing; await c.setHostVisible(true);
+ assert.equal(p.getSnapshot().visible,true); assert.equal(c.isShow(),true);
+ assert.deepEqual(events,['attach','detach','attach','show']); await c.cancel();
+});
+test('detach interrupts pending hide with exactly one actual hidden transition',async()=>{
+ const s=await setup(); s.config.animation.enabled=true; await s.controller.updateConfig(s.config);
+ const hiding=s.controller.hide(); for(let i=0;i<12;i++) await Promise.resolve(); assert.equal(s.context.finishes.length,1);
+ s.platform.unmountHost(); await hiding; s.context.finishes[0]();
+ assert.deepEqual(s.events,['attach','show','config','hide','detach']);
+ assert.equal(s.controller.isShow(),false); await s.controller.cancel();
+});
+test('failed native disposal still emits terminal actual cleanup lifecycle exactly once',async()=>{
+ const p=new FxScopePlatform(); const events=[]; const c=new FxController(p,new FxConfig(),e=>events.push(e.type),{error(){}}); p.bindController(c);
+ p.mountHost(new ScopeContext(),{size:{width:50,height:50},create(){return {content:{},dispose(){throw new Error('native dispose');}};}});
+ p.layoutHost({width:300,height:500}); await c.show();
+ await assert.rejects(c.cancel(),{code:'WINDOW_OPERATION_FAILED'}); await assert.rejects(c.cancel(),{code:'WINDOW_OPERATION_FAILED'});
+ assert.equal(c.getState(),'destroyed'); assert.equal(c.isShow(),false);
+ assert.deepEqual(events,['attach','show','hide','detach','destroy','error']);
+});

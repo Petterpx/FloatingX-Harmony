@@ -404,3 +404,22 @@ test('hide and cancel interrupt animations at invocation before queued work',asy
  const hiding=c.hide(); assert.equal(p.interruptions,1); await hiding;
  const cancel=c.cancel(); assert.equal(p.interruptions,2); await cancel;
 });
+
+test('failed destroy preserves error rejection and terminal cleanup events once',async()=>{
+ const p=new LifecyclePlatform(); p.host=true; const events=[];
+ const c=new FxController(p,new FxConfig(),e=>events.push(e.type),{error(){}});
+ await c.show(); p.errors.set('destroy',new FxError('WINDOW_OPERATION_FAILED','native disposal failed'));
+ await assert.rejects(c.cancel(),{code:'WINDOW_OPERATION_FAILED'});
+ assert.deepEqual(events,['attach','show','hide','detach','destroy','error']);
+ assert.equal(c.getState(),'destroyed'); assert.equal(p.listener,undefined);
+ p.attach(); assert.equal(c.isShow(),false); assert.equal(events.filter(e=>e==='destroy').length,1);
+});
+
+test('host visibility interruption without lifecycle subscription hides a late native show',async()=>{
+ const p=new FakePlatform(); const gate=deferred(); p.gates.set('show',gate.promise); const events=[];
+ const c=new FxController(p,new FxConfig(),e=>events.push(e.type)); const showing=c.show();
+ await p.createStarted.promise; for(let i=0;i<8;i++) await Promise.resolve();
+ const invisible=c.setHostVisible(false); gate.resolve(); await Promise.all([showing,invisible]);
+ assert.equal(c.isShow(),false); assert.equal(events.includes('show'),false);
+ assert.deepEqual(p.calls.filter(v=>['show','hide'].includes(v)),['show','hide']); await c.cancel();
+});
