@@ -43,6 +43,7 @@ export class FxController {
   private generation: number = 0;
   private created: boolean = false;
   private configured: boolean = false;
+  private pendingPositionSave: boolean = false;
   private visible: boolean = false;
   private wanted: boolean = false;
   private hostVisible: boolean = true;
@@ -151,13 +152,13 @@ export class FxController {
     const generation = this.generation;
     return this.enqueue(async (events: FxEvent[]) => {
       this.assertAlive(generation);
-      if (this.created) {
+      if (this.created && this.platformReady()) {
         await this.requirePlatform().applyConfig(snapshot.copy());
         this.assertAlive(generation);
       }
       this.config = snapshot;
-      if (this.created) this.configured = true;
-      if (this.created) this.readPosition();
+      if (this.created) this.configured = this.platformReady();
+      if (this.created && this.platformReady()) this.readPosition();
       events.push(this.event(FxEventType.CONFIG));
     });
   }
@@ -226,6 +227,7 @@ export class FxController {
         this.created = true;
         this.assertAlive(generation);
       }
+      if (platform.isReadyToShow !== undefined && !platform.isReadyToShow()) return;
       if (!this.configured) {
         await platform.applyConfig(this.config.copy());
         this.assertAlive(generation);
@@ -251,6 +253,10 @@ export class FxController {
         }
       }
       this.assertAlive(generation);
+      if (this.pendingPositionSave) {
+        this.pendingPositionSave=false;
+        await this.savePosition(); this.assertAlive(generation);
+      }
       if (!this.hostVisible) return;
       const attachmentEpoch = this.attachmentEpoch;
       await platform.show();
@@ -293,7 +299,7 @@ export class FxController {
         y: request.relative ? this.position.y + request.y : request.y
       };
       this.validatePoint(point);
-      if (this.created) {
+      if (this.created && this.platformReady()) {
         const actual = await this.requirePlatform().move(point, request.animate);
         this.assertAlive(generation);
         this.validatePoint(actual);
@@ -302,7 +308,8 @@ export class FxController {
         this.position = { x: point.x, y: point.y };
         this.config.position = { x: point.x, y: point.y };
       }
-      await this.savePosition();
+      if (this.platformReady()) await this.savePosition();
+      else this.pendingPositionSave=true;
       this.assertAlive(generation);
       events.push(this.event(FxEventType.MOVE));
     }, request);
@@ -343,9 +350,11 @@ export class FxController {
     if (this.state === FxState.DESTROYING || this.state === FxState.DESTROYED) return;
     if (type === FxEventType.ATTACH && !this.attached) {
       this.attachmentEpoch++;
-      this.attached = true; this.hostVisible = true;
+      this.attached = true;
+      const eligible=this.platform!==undefined && this.platform.isHostVisible!==undefined ? this.platform.isHostVisible():true;
+      this.hostVisible = eligible;
       this.dispatch([this.event(FxEventType.ATTACH)]);
-      this.setHostVisible(true).catch(() => {});
+      this.setHostVisible(eligible).catch(() => {});
     } else if (type === FxEventType.DETACH && this.attached) {
       this.attachmentEpoch++;
       this.interruptAnimations();
@@ -381,8 +390,11 @@ export class FxController {
   private validatePoint(point: FxPoint): void {
     if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) throw new FxError('INVALID_GEOMETRY', 'Platform position must be finite');
   }
+  private platformReady(): boolean {
+    return this.platform===undefined || this.platform.isReadyToShow===undefined || this.platform.isReadyToShow();
+  }
   private readPosition(): void {
-    if (!this.created || this.platform === undefined || this.platform.getPosition === undefined) return;
+    if (!this.created || !this.platformReady() || this.platform === undefined || this.platform.getPosition === undefined) return;
     const point = this.platform.getPosition();
     this.validatePoint(point);
     this.position = { x: point.x, y: point.y };

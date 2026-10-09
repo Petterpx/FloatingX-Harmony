@@ -1,0 +1,62 @@
+import { FxWindowHost, FxAppPlatform, FxContent, FxController, FxConfig } from 'floatingx';
+class AppContentParams {
+  close: () => void;
+  button: () => void;
+  constructor(close: () => void, button: () => void) { this.close=close; this.button=button; }
+}
+@Builder
+function appContent(params: AppContentParams) {
+  Column({space:4}) {
+    Text('应用浮窗：拖动标题').height(40)
+    Row({space:4}) { Button('内按钮').onClick(params.button); Button('关闭').onClick(params.close) }
+  }.width(240).height(100).backgroundColor('#E4F2FF').borderRadius(12)
+}
+@Component
+export struct AppDemo {
+  @LocalStorageLink('fxHostReady') @Watch('hostReady') private ready: boolean = false;
+  @State private message: string = '等待主窗口加载';
+  private host?: FxWindowHost;
+  private controller?: FxController;
+  private platform?: FxAppPlatform;
+  private paths: NavPathStack = new NavPathStack();
+  aboutToAppear(): void { this.hostReady(); }
+  private hostReady(): void {
+    if(this.controller!==undefined || !this.ready) return;
+    const host=this.getUIContext().getSharedLocalStorage()?.get<FxWindowHost>('fxWindowHost');
+    if(host===undefined || !host.isValid()) return;
+    this.host=host; host.setPage('Home');
+    const content=new FxContent<AppContentParams>(wrapBuilder(appContent),new AppContentParams(
+      () => { if(this.controller!==undefined) this.run(this.controller.cancel()); },() => { this.message='内按钮已点击'; }),{width:240,height:100});
+    const platform=new FxAppPlatform(host,content,{mode:'blacklist',names:['Blocked']},{dragArea:{x:0,y:0,width:240,height:40}});
+    const controller=new FxController(platform,new FxConfig({position:{x:20,y:120},adsorb:false}));
+    platform.bindController(controller); this.platform=platform; this.controller=controller;
+    this.message='API 12 应用内浮窗'; this.run(controller.show());
+  }
+  private run(promise: Promise<void>): void { promise.catch((error: Error) => { this.message=error.message; }); }
+  @Builder
+  destination(name: string) {
+    NavDestination() {
+      Column({space:12}) {
+        Text(name==='Blocked' ? '黑名单 destination：暂时隐藏':'允许 destination：恢复显示')
+        Button('返回').onClick(() => this.paths.pop())
+      }
+    }.title(name).onShown(() => { this.host?.setPage(name); })
+  }
+  build() {
+    Navigation(this.paths) {
+      Column({space:12}) {
+        Text(this.message)
+        Row({space:8}) {
+          Button('显示').onClick(() => { if(this.controller!==undefined) this.run(this.controller.show()); })
+          Button('隐藏').onClick(() => { if(this.controller!==undefined) this.run(this.controller.hide()); })
+        }
+        Button('底层按钮').onClick(() => { this.message='底层按钮已点击'; })
+        Button('原生 Dialog').onClick(() => this.getUIContext().showAlertDialog({title:'Dialog 应在浮窗上方',message:'验证遮挡与关闭后的按钮点击',confirm:{value:'关闭',action:() => {}}}))
+        Button('router 黑名单页面').onClick(() => this.getUIContext().getRouter().pushUrl({url:'pages/FilteredPage'}))
+        Button('Navigation 黑名单').onClick(() => this.paths.pushPath({name:'Blocked'}))
+        Button('Navigation 允许页').onClick(() => this.paths.pushPath({name:'Allowed'}))
+      }.width('100%').padding(16)
+    }.navDestination(this.destination).title('应用浮窗').onAppear(() => this.host?.setPage('Home'))
+      .onNavBarStateChange((shown: boolean) => { if(shown) this.host?.setPage('Home'); })
+  }
+}

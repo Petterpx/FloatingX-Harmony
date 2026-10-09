@@ -18,12 +18,25 @@ import UIAbility from '@ohos.app.ability.UIAbility';
 import window from '@ohos.window';
 import hilog from '@ohos.hilog';
 
+import { FxWindowHost } from 'floatingx';
+
 export default class EntryAbility extends UIAbility {
+  private host?: FxWindowHost;
+  private stageEpoch: number = 0;
   onWindowStageCreate(windowStage: window.WindowStage): void {
-    windowStage.loadContent('pages/Index', (err) => {
-      if (err.code) {
-        hilog.error(0xFF00, 'EntryAbility', 'Failed to load page: %{public}s', err.message);
-      }
+    const epoch=++this.stageEpoch;
+    const storage=new LocalStorage(); storage.setOrCreate('fxHostReady',false);
+    windowStage.loadContent('pages/Index',storage,(err) => {
+      if(err.code) { hilog.error(0xFF00,'EntryAbility','Failed to load page: %{public}s',err.message); return; }
+      if(epoch!==this.stageEpoch) return;
+      FxWindowHost.create(windowStage,() => epoch===this.stageEpoch).then((host: FxWindowHost) => {
+        if(epoch!==this.stageEpoch) { host.dispose().catch(() => {}); return; }
+        this.host=host; storage.setOrCreate('fxWindowHost',host); storage.setOrCreate('fxHostReady',true);
+      }).catch((error: Error) => { hilog.error(0xFF00,'EntryAbility','Host creation: %{public}s',error.message); });
     });
+  }
+  onWindowStageDestroy(): void {
+    this.stageEpoch++; const host=this.host; this.host=undefined;
+    if(host!==undefined) host.dispose().catch((error: Error) => { hilog.error(0xFF00,'EntryAbility','Host cleanup: %{public}s',error.message); });
   }
 }

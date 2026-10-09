@@ -36,6 +36,8 @@ export interface FxPlatform {
   /** Actual resource attachment, independent of user show intent. */
   subscribeLifecycle?(listener: (type: FxEventType) => void): () => void;
   isHostVisible?(): boolean;
+  /** Optional second gate: create may attach an invisible root before native layout. */
+  isReadyToShow?(): boolean;
   /** Must resolve interrupted native animation promises; called before queueing hide/cancel/move. */
   cancelAnimations?(): void;
 }

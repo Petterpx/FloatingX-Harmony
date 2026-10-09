@@ -7,3 +7,6 @@ export { FxContent, FxContentSource } from './src/main/ets/component/FxContent';
 export { FloatingXHost } from './src/main/ets/scope/FloatingXHost';
 export { FxScopeSnapshot, FxInteractions, FxDragArea, FxScopePlatform } from './src/main/ets/scope/FxScopePlatform';
 export { FxFloatView, FxFloatViewAdapter } from './src/main/ets/component/FxFloatView';
+export { FxPagePolicy, allowsPage, copyPagePolicy } from './src/main/ets/app/FxPageFilter';
+export { FxWindowHost } from './src/main/ets/app/FxWindowHost';
+export { FxAppPlatform } from './src/main/ets/app/FxAppPlatform';

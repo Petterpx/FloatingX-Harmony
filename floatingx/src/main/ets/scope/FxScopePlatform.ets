@@ -29,6 +29,7 @@ export class FxScopeSnapshot {
 export class FxScopePlatform implements FxPlatform {
   readonly actualScope: FxScope = FxScope.SCOPE;
   private controller?: FxController;
+  private managesHostVisibility: boolean = true;
   private source?: FxContentSource;
   private mount?: FxContentMount;
   private context?: UIContext;
@@ -51,7 +52,7 @@ export class FxScopePlatform implements FxPlatform {
   private longPressTimer: number = -1;
   interactions: FxInteractions;
   constructor(interactions: FxInteractions = {}) { this.interactions=interactions; }
-  bindController(controller: FxController): void { this.controller = controller; }
+  bindController(controller: FxController, managesHostVisibility: boolean = true): void { this.controller = controller; this.managesHostVisibility=managesHostVisibility; }
   getSnapshot(): FxScopeSnapshot { return this.snapshot; }
   getGeometry(): FxGeometryInput { return {viewport:this.viewport,content:this.snapshot.size,config:this.snapshot.config}; }
   getPosition(): FxPoint { return {x:this.position.x,y:this.position.y}; }
@@ -79,7 +80,7 @@ export class FxScopePlatform implements FxPlatform {
     if(this.created) this.attachContent();
     if(this.positioned) this.position=clamp(this.position,bounds(this.getGeometry()));
     this.refresh();
-    if(this.controller !== undefined) this.controller.setHostVisible(true).catch(() => {});
+    if(this.controller !== undefined && this.managesHostVisibility) this.controller.setHostVisible(true).catch(() => {});
   }
   layoutContent(size: FxSize): void {
     if(size.width<=0 || size.height<=0 || (size.width===this.snapshot.size.width && size.height===this.snapshot.size.height)) return;
@@ -90,7 +91,7 @@ export class FxScopePlatform implements FxPlatform {
     this.cancelAnimations(); this.cancelTouch(); this.snapshot.visible=false;
     this.context=undefined; this.hostReady=false;
     if(this.attached) { this.attached=false; this.lifecycle(FxEventType.DETACH); }
-    if(this.controller !== undefined) this.controller.setHostVisible(false).catch(() => {});
+    if(this.controller !== undefined && this.managesHostVisibility) this.controller.setHostVisible(false).catch(() => {});
     try { this.releaseContent(); }
     catch(error) { if(this.controller!==undefined) this.controller.reportError(error as Error); }
     finally { this.source=undefined; this.refresh(); }
@@ -111,9 +112,12 @@ export class FxScopePlatform implements FxPlatform {
     this.snapshot.visible=true; this.snapshot.opacity=this.snapshot.config.animation.enabled ? 0:1; this.refresh();
     await this.animate(() => { this.snapshot.opacity=1; this.refresh(); },this.snapshot.config.animation.enabled);
   }
-  async hide(): Promise<void> {
+  async hide(beforeHidden?: () => void): Promise<void> {
+    const visible=this.snapshot.visible; const opacity=this.snapshot.opacity;
     this.cancelAnimations(); this.cancelTouch();
     await this.animate(() => { this.snapshot.opacity=0; this.refresh(); },this.snapshot.config.animation.enabled);
+    try { if(beforeHidden!==undefined) beforeHidden(); }
+    catch(error) { this.snapshot.visible=visible; this.snapshot.opacity=opacity; this.refresh(); throw error as Error; }
     this.snapshot.visible=false; this.refresh();
   }
   async move(point: FxPoint, animate: boolean): Promise<FxPoint> {

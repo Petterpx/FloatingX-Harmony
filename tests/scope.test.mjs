@@ -136,3 +136,7 @@ test('failed native disposal still emits terminal actual cleanup lifecycle exact
  assert.equal(c.getState(),'destroyed'); assert.equal(c.isShow(),false);
  assert.deepEqual(events,['attach','show','hide','detach','destroy','error']);
 });
+test('native hide completion failure rolls back visible snapshot after fade',async()=>{
+ const s=await setup();await assert.rejects(s.platform.hide(()=>{throw Error('native hide');}));
+ assert.equal(s.platform.getSnapshot().visible,true);assert.equal(s.platform.getSnapshot().opacity,1);await s.controller.cancel();
+});
