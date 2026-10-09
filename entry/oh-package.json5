@@ -1,0 +1,9 @@
+{
+  "modelVersion": "5.0.0",
+  "name": "entry",
+  "version": "0.1.0",
+  "description": "FloatingX Stage sample",
+  "dependencies": {
+    "floatingx": "file:../floatingx"
+  }
+}

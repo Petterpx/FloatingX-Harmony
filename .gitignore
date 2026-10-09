@@ -1,0 +1,30 @@
+# Local tools, dependencies and generated output
+node_modules/
+oh_modules/
+build/
+.hvigor/
+.preview/
+.idea/
+work/
+.superpowers/
+coverage/
+*.har
+*.hap
+*.app
+*.log
+.DS_Store
+
+# Machine-specific paths, credentials and signing materials
+local.properties
+local-signing*.json5
+.env
+.env.*
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.p7b
+*.cer
+*.crt
+*.pem
+*.key

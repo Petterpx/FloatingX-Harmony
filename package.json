@@ -1,0 +1,15 @@
+{
+  "name": "floatingx-harmony-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "build:core": "tsc -p tsconfig.core.json",
+    "test:core": "npm run build:core && node --test tests/*.test.mjs",
+    "build:har": "hvigorw --mode module -p module=floatingx@default -p product=default assembleHar --no-daemon",
+    "build:hap": "hvigorw --mode module -p module=entry@default -p product=default assembleHap --no-daemon"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

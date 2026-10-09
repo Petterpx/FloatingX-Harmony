@@ -1,0 +1,10 @@
+{
+  "module": {
+    "name": "floatingx",
+    "type": "har",
+    "deviceTypes": [
+      "phone",
+      "tablet"
+    ]
+  }
+}
