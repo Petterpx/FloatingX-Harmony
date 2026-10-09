@@ -12,9 +12,11 @@
 
 ## Global Constraints
 
+用户实施中变更：最低兼容 API 21（HarmonyOS 6.0.1(21)），取代此前 API 12 的目标；此前 API 12 构建记录保留为历史证据，不计入新目标验收。
+
 - 工作目录仅为 `/Users/petterp/Documents/HarmonyOS/FloatingX` 或它的隔离工作树。
 - 不在 Android 仓库新增或修改任何文件。
-- 首版面向手机、平板的 Stage 模型，最低目标 API 12。
+- 首版面向手机、平板的 Stage 模型，最低目标 API 21。
 - 首版采用一个 HAR，内部按职责隔离，降低接入和版本管理成本。
 - 对外统一 vp。
 - app / system 共用 tag 命名空间。重复 tag 默认报 `DUPLICATE_TAG`。
@@ -35,7 +37,7 @@
 
 按任务 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 执行。每项包含可独立验证的产物与提交。不要为提前并行修改未稳定接口。任务 7 的系统能力验证独立记录，即便授权或设备不可用，也继续完成可以验证的其他内容，最终明确剩余验收项。
 
-工具链基线目标为 HarmonyOS 5.0.0 / API 12；不要拿本机现有 OpenHarmony API 9 代替。任务 1 从实际使用的官方 DevEco 工具链生成工程，并记录 SDK、Hvigor 插件、OHPM、Node 精确版本和锁文件。若官方可用版本较新，保持 compatibleSdkVersion 对应 API 12，在基线记录中固定实际 compileSdkVersion；不猜造 wrapper 或插件版本。
+工具链基线目标为 HarmonyOS 6.0.1 / API 21；不要拿本机现有 OpenHarmony API 9 代替。任务 1 从实际使用的官方 DevEco 工具链生成工程，并记录 SDK、Hvigor 插件、OHPM、Node 精确版本和锁文件。若官方可用版本较新，保持 compatibleSdkVersion 对应 API 21，在基线记录中固定实际 compileSdkVersion（不低于 21）；不猜造 wrapper 或插件版本。
 
 ## 文件职责
 
@@ -346,7 +348,7 @@ async updateContent(params: T): Promise<void> {
 
 ## 审阅与执行方式
 
-本文等待用户审阅。推荐由主会话统筹、Sol 按上述顺序实现，每项完成后独立审查，再进行整体平台验收。理由：三种宿主共用状态机与几何接口，按任务串行交接更容易维持语义一致，独立审查集中发现资源和异步生命周期问题。
+本文已由用户确认执行；实施中用户明确将最低兼容级别改为 API 21。由主会话统筹、Sol 按上述顺序实现，每项完成后独立审查，再进行整体平台验收。理由：三种宿主共用状态机与几何接口，按任务串行交接更容易维持语义一致，独立审查集中发现资源和异步生命周期问题。
 
 若用户选主会话直接实现，则执行顺序与验收标准不变，结束前仍做一次独立整体审查。
 
