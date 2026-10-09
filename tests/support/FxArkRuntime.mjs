@@ -48,3 +48,19 @@ export class AppWindow {
  off(name,callback){this.offCalls.push(name);this.callbacks.delete(name);}
  emit(name,value){this.callbacks.get(name)?.(value);}
 }
+export function loadSystemAdapter(nativeBoundary) {
+ loadScopePlatform();
+ const root=path.resolve(import.meta.dirname,'../..');const destination=path.join(root,'work/core/system/FxWindowAdapter.js');fs.mkdirSync(path.dirname(destination),{recursive:true});
+ fs.writeFileSync(destination,ts.transpileModule(fs.readFileSync(path.join(root,'floatingx/src/main/ets/system/FxWindowAdapter.ets'),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText);
+ const Module=require('node:module');const original=Module._load;
+ Module._load=function(name,...args){
+  if(name==='@ohos.window')return {default:{WindowType:{TYPE_FLOAT:8},createWindow:async config=>{nativeBoundary.created.push(config);return nativeBoundary.window;}}};
+  if(name==='@ohos.display')return {default:{getDisplayByIdSync:id=>{nativeBoundary.displayReads.push(id);return nativeBoundary.display;},on:(_name,listener)=>{nativeBoundary.displayListener=listener;},off:()=>{nativeBoundary.displayListener=undefined;}}};
+  if(name==='@ohos.abilityAccessCtrl')return {default:{GrantStatus:{PERMISSION_GRANTED:0},createAtManager:()=>({checkAccessToken:async(...args)=>{nativeBoundary.permissionReads.push(args);if(nativeBoundary.accessError)throw nativeBoundary.accessError;return nativeBoundary.grant;}})}};
+  if(name==='@ohos.bundle.bundleManager')return {default:{BundleFlag:{GET_BUNDLE_INFO_WITH_APPLICATION:1},getBundleInfoForSelf:async()=>({appInfo:{accessTokenId:123}})}};
+  return original.call(this,name,...args);
+ };
+ globalThis.LocalStorage=class{data=new Map();setOrCreate(k,v){this.data.set(k,v);}get(k){return this.data.get(k);}};
+ delete require.cache[destination];
+ try{return require(destination);}finally{Module._load=original;}
+}

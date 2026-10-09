@@ -1,3 +1,4 @@
+import './src/main/ets/system/FxSystemPage';
 export const FLOATINGX_VERSION: string = '0.1.0';
 // Task 5 scope contracts; final facade will consolidate exports in Task 8.
 export { FxConfig } from './src/main/ets/core/FxConfig';
@@ -10,3 +11,7 @@ export { FxFloatView, FxFloatViewAdapter } from './src/main/ets/component/FxFloa
 export { FxPagePolicy, allowsPage, copyPagePolicy } from './src/main/ets/app/FxPageFilter';
 export { FxWindowHost } from './src/main/ets/app/FxWindowHost';
 export { FxAppPlatform } from './src/main/ets/app/FxAppPlatform';
+// Side-effect import keeps the HAR named route in every actual consumer graph.
+export { FloatingXSystemPage } from './src/main/ets/system/FxSystemPage';
+export { FxSystemPlatform, FxFallbackFactory } from './src/main/ets/system/FxSystemPlatform';
+export { FxNativeWindowFactory } from './src/main/ets/system/FxWindowAdapter';

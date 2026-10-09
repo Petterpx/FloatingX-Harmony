@@ -11,6 +11,7 @@
     "deliveryWithInstall": true,
     "installationFree": false,
     "pages": "$profile:main_pages",
+    "requestPermissions": [{"name":"ohos.permission.SYSTEM_FLOAT_WINDOW"}],
     "abilities": [
       {
         "name": "EntryAbility",

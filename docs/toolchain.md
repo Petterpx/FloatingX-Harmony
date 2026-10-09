@@ -77,3 +77,15 @@ Task 1 尚未引入核心 `.ts` 源码与测试，这两个命令当前都因 `T
 | 真机/模拟器验收 | 未执行 |
 
 后续即使主机测试通过，也不改变真实 SDK 编译和设备关口未通过的结论。统筹会话正在另行获取官方 OpenHarmony API 12 SDK；它不等于本任务已经完成 HarmonyOS 商业 SDK 编译。
+
+## 系统浮窗权限与本地签名边界（Task 7）
+
+`entry` 含系统示例，独立声明 `ohos.permission.SYSTEM_FLOAT_WINDOW`；HAR 不声明该权限。单纯使用 scope/app 的宿主不需要系统浮窗权限。权限检查在首次 show 才通过目标 SDK AccessToken 接口执行；`system_grant` 不使用 `requestPermissionsFromUser`，也不自动打开设置。实际平台错误码保存在 `FxError.platformCode`。
+
+商业 [HarmonyOS V5 受限权限文档](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-v5/restricted-permissions-V5)将 SYSTEM_FLOAT_WINDOW 限定为批准的多方视频/屏幕共享等 **2in1** 应用场景，并要求可见退出控件。普通手机/平板系统浮窗不能因为 OpenHarmony API12 编译成功就声称支持。系统示例提供关闭按钮；无授权时明确 reject，只有显式提供 app fallback 才降级，并保留原失败与 `actualScope=app`。先清理系统残留，再创建 app；清理失败拒绝降级。
+
+本地签名、证书、profile/ACL 与 SDK 路径不得进入 Git。官方[自动签名说明](https://developer.huawei.com/consumer/cn/doc/HarmonyOS-Guides/ide-signing-auto)列出 ACL 支持，不扩展 V5 商业设备/场景政策。本任务未读取/生成签名材料、未安装 HAP、未更改设备权限；商业 SDK 与有/无授权设备验收由 Task9 单独报告。
+
+API12 公开 `Window` 没有隐藏接口。本实现隐藏时保留 TYPE_FLOAT 资源，内容不可见、背景透明、touchable/focusable 均关闭；显示时恢复目标交互属性，DisplayOnly 始终禁触摸/焦点，cancel 才销毁。设备仍须确认透明表面无阴影、无焦点和触摸影响；这不等于操作系统窗口已移除/隐藏。
+
+系统浮窗不随主窗口进入后台而自动隐藏。资源所有者须在自身 UIAbility 销毁时 cancel 所属 controller；系统示例仅用已有 WindowHost 的 bind 接口做所有者销毁清理，没有接入其页面/前后台可见性过滤。公共系统安装不强制依赖 app WindowHost，不使用全局清理误伤其他窗口所有者。

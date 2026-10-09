@@ -10,6 +10,11 @@ import { FxContentSource, FxContentMount } from '../component/FxContent';
 import { FxTouch, FxPointer, FxTouchResult } from '../component/FxTouch';
 import { FxAnimation } from '../component/FxAnimation';
 
+export interface FxScopeBoundary {
+  displayPointers: boolean;
+  move(point: FxPoint, animate: boolean): Promise<FxPoint>;
+  moveFrame(point: FxPoint): void;
+}
 export interface FxDragArea { x: number; y: number; width: number; height: number; }
 export interface FxInteractions {
   dragArea?: FxDragArea;
@@ -51,7 +56,9 @@ export class FxScopePlatform implements FxPlatform {
   private dragged: boolean = false;
   private longPressTimer: number = -1;
   interactions: FxInteractions;
-  constructor(interactions: FxInteractions = {}) { this.interactions=interactions; }
+  private boundary?: FxScopeBoundary;
+  constructor(interactions: FxInteractions = {}, boundary?: FxScopeBoundary) { this.interactions=interactions;this.boundary=boundary; }
+  adoptPosition(point: FxPoint): void { this.position={x:point.x,y:point.y};this.positioned=true;this.refresh(); }
   bindController(controller: FxController, managesHostVisibility: boolean = true): void { this.controller = controller; this.managesHostVisibility=managesHostVisibility; }
   getSnapshot(): FxScopeSnapshot { return this.snapshot; }
   getGeometry(): FxGeometryInput { return {viewport:this.viewport,content:this.snapshot.size,config:this.snapshot.config}; }
@@ -122,6 +129,7 @@ export class FxScopePlatform implements FxPlatform {
   }
   async move(point: FxPoint, animate: boolean): Promise<FxPoint> {
     this.assertAlive(); const target=clamp(point,bounds(this.getGeometry()));
+    if(this.boundary!==undefined) {const actual=await this.boundary.move(target,animate);this.adoptPosition(actual);return this.getPosition();}
     await this.animate(() => { this.position=target; this.positioned=true; this.refresh(); },animate);
     return this.getPosition();
   }
@@ -139,13 +147,14 @@ export class FxScopePlatform implements FxPlatform {
     this.animation.cancel();
     const finish=this.finishAnimation; this.finishAnimation=undefined; if(finish!==undefined) finish();
   }
+  hasPrimaryPointer(): boolean {return this.primary!==undefined;}
   handleTouch(event: TouchEvent): void {
     if(this.snapshot.config.displayMode===FxDisplayMode.DisplayOnly) return;
     if(event.type===TouchType.Cancel) { const wasDragged=this.dragged; this.cancelTouch(); if(wasDragged) this.settleDrag(); return; }
     const changes=event.changedTouches;
     for(let i=0;i<changes.length;i++) {
       const native=changes[i];
-      const pointer: FxPointer={id:native.id,x:native.windowX,y:native.windowY,timeMs:event.timestamp/1000000};
+      const pointer: FxPointer={id:native.id,x:this.boundary!==undefined && this.boundary.displayPointers?native.displayX:native.windowX,y:this.boundary!==undefined && this.boundary.displayPointers?native.displayY:native.windowY,timeMs:event.timestamp/1000000};
       if(event.type===TouchType.Down) {
         if(this.primary!==undefined) continue;
         this.cancelAnimations(); this.primary=pointer; this.dragged=false;
@@ -163,6 +172,7 @@ export class FxScopePlatform implements FxPlatform {
         const result=this.touch.up(pointer);
         if(primary && result.kind==='end' && (result.position.x!==this.position.x || result.position.y!==this.position.y)) {
           this.position=result.position; this.dragged=true; this.refresh();
+          if(this.boundary!==undefined)this.boundary.moveFrame(this.position);
         }
         this.deliver(result);
         if(primary) { const wasDragged=this.dragged; this.cancelTouch(); if(wasDragged) this.settleDrag(); }
@@ -174,6 +184,7 @@ export class FxScopePlatform implements FxPlatform {
     try {
       if(result.kind==='drag') {
         this.dragged=true; clearTimeout(this.longPressTimer); this.position=result.position; this.refresh();
+        if(this.boundary!==undefined)this.boundary.moveFrame(this.position);
         if(this.interactions.onDrag!==undefined) {
           const callback=this.interactions.onDrag; this.runCallback(() => callback(this.getPosition()));
         }

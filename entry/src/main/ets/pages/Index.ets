@@ -1,4 +1,5 @@
 import { ScopeDemo } from './ScopeDemo';
+import { SystemDemo } from './SystemDemo';
 import { AppDemo } from './AppDemo';
 import { FxWindowHost } from 'floatingx';
 @Entry({useSharedStorage:true})
@@ -12,6 +13,7 @@ struct Index {
     Tabs() {
       TabContent() { ScopeDemo() }.tabBar('局部')
       TabContent() { AppDemo() }.tabBar('应用')
+      TabContent() { SystemDemo() }.tabBar('系统')
     }.width('100%').height('100%')
   }
 }
