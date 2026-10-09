@@ -1,7 +1,7 @@
 # FloatingX 鸿蒙原生版设计规格
 
 日期：2026-10-09
-状态：架构方向已确认；本文等待审阅，尚未开始产品实现。
+状态：用户于 2026-10-09 确认本文，进入实施计划阶段，尚未开始产品实现。
 
 ## 1. 目标与依据
 
@@ -127,7 +127,7 @@ show / hide 可重复调用，cancel 幂等；cancel 后 show / move 返回 `DES
 
 ## 10. 参考资料
 
-- 当前仓库：FloatingX.kt、IFxControl.kt、FxBasisConfig.kt、FxViewLocationHelper.kt、FxViewTouchHelper.kt，以及 app / scope / system 各自的配置和入口。
+- Android 参考仓库 `/Users/petterp/Documents/Android/kotlin/model/FloatingX`：FloatingX.kt、IFxControl.kt、FxBasisConfig.kt、FxViewLocationHelper.kt、FxViewTouchHelper.kt，以及 app / scope / system 各自的配置和入口。
 - [OpenHarmony 官方 OverlayManager API](https://github.com/openharmony/docs/blob/master/zh-cn/application-dev/reference/apis-arkui/arkts-apis-uicontext-overlaymanager.md)：API 12 基础接口、浮层层级、安全区行为。
 - [OpenHarmony 官方 Stage 窗口开发](https://github.com/openharmony/docs/blob/master/zh-cn/application-dev/windowmanager/application-window-stage.md)：TYPE_FLOAT、生命周期及平台权限约束。
 - OpenHarmony 文档作为公开接口依据；HarmonyOS NEXT 的发行版权限要求与工具链兼容性，实施时还须用目标 SDK 及华为对应文档核对，不能直接等同两者的权限政策。
