@@ -1,6 +1,9 @@
 import { FxConfig } from './FxConfig';
 import { FxError } from './FxError';
-import { FxPoint } from './FxTypes';
+import { FxPoint, FxPositionRecord } from './FxTypes';
+import { FxGeometryInput, logicalEdge } from '../geometry/FxGeometry';
+import { FxStorageOptions, storageError } from '../storage/FxStorage';
+import { FxPositionSession } from '../storage/FxPositionSession';
 import { FxPlatform, FxState, FxScope, FxEventType, FxEvent, FxEventCallback, FxLogger } from './FxPlatform';
 
 interface FxNativeError { message: string; code?: number; }
@@ -47,6 +50,10 @@ export class FxController {
   private tail: Promise<void> = Promise.resolve();
   private cancellation?: Promise<void>;
   private pendingMove?: FxMoveRequest;
+  private positionSession?: FxPositionSession;
+  private geometry?: () => FxGeometryInput;
+  private showRequested: boolean = false;
+  private restorationDone: boolean = false;
 
   constructor(platform: FxPlatform, config: FxConfig, onEvent?: FxEventCallback, logger?: FxLogger) {
     this.platform = platform;
@@ -57,6 +64,7 @@ export class FxController {
   }
 
   show(): Promise<void> {
+    this.showRequested = true;
     const generation = this.generation;
     return this.enqueue(async (events: FxEvent[]) => {
       this.assertAlive(generation);
@@ -86,6 +94,7 @@ export class FxController {
   cancel(): Promise<void> {
     if (this.cancellation !== undefined) return this.cancellation;
     this.generation++;
+    if (this.positionSession !== undefined) this.positionSession.close();
     this.wanted = false;
     this.state = FxState.DESTROYING;
     this.cancellation = this.enqueue(async (events: FxEvent[]) => {
@@ -97,6 +106,8 @@ export class FxController {
         this.configured = false;
         this.visible = false;
         this.pendingMove = undefined;
+        this.positionSession = undefined;
+        this.geometry = undefined;
         this.platform = undefined;
         this.state = FxState.DESTROYED;
       }
@@ -129,6 +140,44 @@ export class FxController {
       if (this.created) this.readPosition();
       events.push(this.event(FxEventType.CONFIG));
     });
+  }
+
+  /** Internal installation binding. Keys use the scope at installation and never change on fallback. */
+  bindPositionStorage(options: FxStorageOptions, geometry: () => FxGeometryInput): void {
+    if (this.showRequested || this.created || this.positionSession !== undefined ||
+      this.state === FxState.DESTROYING || this.state === FxState.DESTROYED) {
+      throw new FxError('INVALID_CONFIG', 'Position storage must be bound once before showing');
+    }
+    const scoped: FxStorageOptions = { namespace: options.namespace, key: options.key,
+      storage: options.storage, scope: this.scope };
+    this.positionSession = new FxPositionSession(scoped, (error: FxError) => {
+      this.dispatch([this.event(FxEventType.ERROR, error)]);
+    });
+    this.geometry = geometry;
+  }
+
+  /** Drag adapters update logical readback during frames, then call this once on drag end. */
+  async savePosition(): Promise<void> {
+    if (this.positionSession === undefined || this.state === FxState.DESTROYING || this.state === FxState.DESTROYED) return;
+    try {
+      this.readPosition();
+      const input = this.geometryInput();
+      const edge = logicalEdge(this.position, input);
+      const record: FxPositionRecord = { version: 1,
+        position: { x: this.position.x, y: this.position.y },
+        viewport: { width: input.viewport.size.width, height: input.viewport.size.height }, edge: edge };
+      await this.positionSession.save(record);
+    } catch (error) { this.dispatch([this.event(FxEventType.ERROR, storageError(error as Error))]); }
+  }
+
+  clearPosition(): Promise<void> {
+    return this.positionSession === undefined ? Promise.resolve() : this.positionSession.clear();
+  }
+
+  private geometryInput(): FxGeometryInput {
+    if (this.geometry === undefined) throw new FxError('INVALID_GEOMETRY', 'Position storage requires geometry');
+    const input = this.geometry();
+    return { viewport: input.viewport, content: input.content, config: this.config };
   }
 
   getX(): number { this.readPositionSafely(); return this.position.x; }
@@ -165,6 +214,24 @@ export class FxController {
         this.configured = true;
         this.readPosition();
       }
+      if (!this.restorationDone && this.positionSession !== undefined) {
+        let point: FxPoint | undefined;
+        try { point = await this.positionSession.restore(this.geometryInput()); }
+        catch (error) { this.dispatch([this.event(FxEventType.ERROR, storageError(error as Error))]); }
+        this.assertAlive(generation);
+        this.restorationDone = true;
+        if (point !== undefined) {
+          try {
+            const actual = await platform.move(point, false);
+            this.assertAlive(generation);
+            this.validatePoint(actual);
+            this.position = { x: actual.x, y: actual.y };
+          } catch (error) {
+            this.assertAlive(generation);
+            this.dispatch([this.event(FxEventType.ERROR, storageError(error as Error))]);
+          }
+        }
+      }
       await platform.show();
       this.visible = true;
       this.assertAlive(generation);
@@ -178,6 +245,7 @@ export class FxController {
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       return Promise.reject(new FxError('INVALID_GEOMETRY', 'Move coordinates must be finite'));
     }
+    if (this.positionSession !== undefined) this.positionSession.markUserMove();
     const pending = this.pendingMove;
     if (pending !== undefined && pending.completion !== undefined) {
       pending.x = relative ? pending.x + x : x;
@@ -207,6 +275,8 @@ export class FxController {
         this.position = { x: point.x, y: point.y };
         this.config.position = { x: point.x, y: point.y };
       }
+      await this.savePosition();
+      this.assertAlive(generation);
       events.push(this.event(FxEventType.MOVE));
     }, request);
     return request.completion;

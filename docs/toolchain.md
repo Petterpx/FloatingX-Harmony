@@ -1,10 +1,16 @@
 # FloatingX 工具链与验证关口
 
+## 当前最低版本：API 21（用户覆盖，2026-10-09）
+
+最低兼容版本已按用户要求提高到 **API 21**。根 `build-profile.json5` 的 `compileSdkVersion`、`compatibleSdkVersion`、`targetSdkVersion` 均为 `6.0.1(21)`，`runtimeOS` 保持 `HarmonyOS`。映射依据[官方应用级 build-profile 配置说明](https://developer.huawei.com/consumer/cn/doc/doccenter-deveco-studio/ide-hmos-hvigor-build-profile-app)。`modelVersion` 不随 API 数字自动调整，须依据实际配套 Hvigor 工具验证。
+
+Task 1–3 的 API 12 研究、OpenHarmony 公共 SDK ArkTS 检查与 HAR/HAP 构建仅为历史证据，**不构成当前 API 21 最低版本的构建或设备验收**。下文 Task 1 环境和结果保留原时间范围。API 21+ 的正式构建需要匹配的真实 SDK/Hvigor；主机测试和 Preferences 原生边界替身测试也不能代替 SDK 编译或重启 App 的设备验收。
+
 ## 工程基线
 
 这是面向手机、平板的 HarmonyOS Stage 工程：`floatingx` 为唯一 HAR，`entry` 为示例 HAP。正式包版本与 `FLOATINGX_VERSION` 均为 `0.1.0`。示例通过 `file:../floatingx` 引入模块，并从 `floatingx` 包入口导入、显示版本值。
 
-`compileSdkVersion`、`compatibleSdkVersion`、`targetSdkVersion` 固定为 `5.0.0(12)`，`runtimeOS` 为 `HarmonyOS`。开发态 `modelVersion` 固定为 `5.0.0`。这是工程配置基线，不代表本机已安装或验证该 SDK。
+`compileSdkVersion`、`compatibleSdkVersion`、`targetSdkVersion` 当前均为 `6.0.1(21)`，`runtimeOS` 为 `HarmonyOS`。开发态 `modelVersion` 固定为 `5.0.0`。这是工程配置基线，不代表本机已安装或验证该 SDK。
 
 [HarmonyOS 5.0.0 官方版本映射](https://developer.huawei.com/consumer/en/doc/harmonyos-releases-V5/overview-V5)列出 DevEco Studio 5.0.0 Release（5.0.3.906），其 SDK 基于 OpenHarmony 5.0.0.71 / API 12 Release。新工具包可运行较早开发态工程，但需要检查实际配套版本。[官方 Hvigor 配置说明](https://developer.huawei.com/consumer/cn/doc/doccenter-deveco-studio/ide-hmos-hvigor-set-options)允许 `modelVersion` 从 `5.0.0` 到当前工具包支持的版本；项目未声明第三方构建插件。`@ohos/hvigor-ohos-plugin` 来自官方工具包配套依赖，不能用旧 API 9 插件替换。
 
@@ -15,7 +21,7 @@
 - `code/DocsSample/ApplicationModels/StageModelAbilityDevelop/`：Stage `AppScope`、module/entry 配置、UIAbility 的 `loadContent('pages/Index')` 生命周期。
 - `code/BasicFeature/FileManagement/FileManager/Library/`：HAR 类型、包入口、`harTasks` 和 Stage 构建配置。
 
-这里是依据官方样例整理的最小工程，**没有声称由本机 DevEco 向导生成**。该固定样例仍使用 API 11、Hvigor 4.0.2/3.0.2；这些旧工具版本没有复制进本工程。配置改为 HarmonyOS API 12、`phone/tablet`、统一 `modelVersion: 5.0.0` 与 `export default { system, plugins: [] }` 形式，保留一个 UIAbility，去除样例业务、权限与测试依赖。HAR 任务形态参照[官方 HSP 转 HAR 指导](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/hsp-to-har)。代码版权说明见 [第三方声明](../THIRD_PARTY_NOTICES.md)。图标是自建 SVG。
+这里是依据官方样例整理的最小工程，**没有声称由本机 DevEco 向导生成**。该固定样例仍使用 API 11、Hvigor 4.0.2/3.0.2；这些旧工具版本没有复制进本工程。Task 1 初始配置改为 HarmonyOS API 12（现已覆盖为 API 21）、`phone/tablet`、统一 `modelVersion: 5.0.0` 与 `export default { system, plugins: [] }` 形式，保留一个 UIAbility，去除样例业务、权限与测试依赖。HAR 任务形态参照[官方 HSP 转 HAR 指导](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/hsp-to-har)。代码版权说明见 [第三方声明](../THIRD_PARTY_NOTICES.md)。图标是自建 SVG。
 
 ## 本机实际环境（2026-10-09 Task 1）
 

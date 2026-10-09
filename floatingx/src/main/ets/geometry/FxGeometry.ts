@@ -123,6 +123,12 @@ function selectedEdge(point: FxPoint, limits: FxBounds, direction: FxEdgeAdsorb)
   }
 }
 
+/** The configured adsorption axis determines the logical saved edge, including corner ties. */
+export function logicalEdge(point: FxPoint, input: FxGeometryInput): FxEdge {
+  validatePoint(point);
+  return selectedEdge(point, bounds(input), input.config.edgeAdsorb);
+}
+
 /** Native position and hit region describe only the visible slice; logical point stays full-sized. */
 export function project(point: FxPoint, input: FxGeometryInput): FxProjection {
   const limits = bounds(input);
