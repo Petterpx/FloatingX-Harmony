@@ -42,3 +42,10 @@ test('private frame measures full content under clipped constraints and observes
  assert.deepEqual(m.measure(),{width:80,height:40});assert.deepEqual(sizes.at(-1),{width:80,height:40});
  const late=frame.sizeCallback;m.dispose();assert.equal(frame.sizeCallback,undefined);late();assert.equal(sizes.length,2);assert.equal(m.measure(),undefined);
 });
+test('percentage root uses stable containing block through repeated full, clipped and restored layouts',()=>{
+ const s=source();const m=s.create({vp2px:v=>v*4,px2vp:p=>p/4});const frame=native.frames.at(-1);
+ const child={size:{width:0,height:0},measure(c){this.size={width:c.percentReference.width*.5,height:c.percentReference.height*.5};},getMeasuredSize(){return this.size;}};frame.children=[child];
+ for(const width of [200,200,100,100,200,200]){frame.onMeasure({minSize:{width:0,height:0},maxSize:{width,height:200},percentReference:{width,height:200}});assert.deepEqual(m.measure(),{width:25,height:25});}
+ child.measure=function(){this.size={width:280,height:160};};frame.onMeasure({maxSize:{width:100,height:200}});assert.deepEqual(m.measure(),{width:70,height:40});
+ child.measure=function(){this.size={width:120,height:80};};frame.onMeasure({maxSize:{width:100,height:200}});assert.deepEqual(m.measure(),{width:30,height:20});m.dispose();
+});

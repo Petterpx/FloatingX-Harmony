@@ -21,7 +21,7 @@ class FxContentFrame extends FrameNode {
       const child=this.getChild(i);
       if(child!==null) {child.measure(full);const measured=child.getMeasuredSize();size.width=Math.max(size.width,measured.width);size.height=Math.max(size.height,measured.height);}
     }
-    this.setMeasuredSize(size);if(size.width>0 && size.height>0)this.reference={width:size.width,height:size.height};
+    this.setMeasuredSize(size);
   }
 }
 class FxTypedMount<T extends Object> implements FxContentMount {

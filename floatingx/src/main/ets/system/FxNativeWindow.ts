@@ -26,6 +26,8 @@ export interface FxSystemOwner {
 }
 export interface FxNativeWindow {
   readonly requiresView?: boolean;
+  /** True after an unsafe unfinished OS call retires this window. */
+  readonly terminated?: boolean;
   /** Make initially deferred native readback valid while content and input stay hidden. */
   prepareGeometry?(): Promise<void>;
   load(owner: FxSystemOwner): Promise<void>;

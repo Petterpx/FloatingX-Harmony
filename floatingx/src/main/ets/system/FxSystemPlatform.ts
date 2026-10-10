@@ -134,6 +134,13 @@ export class FxSystemPlatform implements FxPlatform {
       this.positioned=true;this.projection={position:{x:actual.x/d,y:actual.y/d},visibleSize:projection.visibleSize,contentOffset:projection.contentOffset};
       if(this.view!==undefined)this.view.adoptPosition(this.position);
     } catch(error) {
+      if(native.terminated===true) {
+        // Cancellation marks the public control terminal immediately, but its
+        // queued cleanup must run after this transaction returns, never be awaited here.
+        if(this.controller!==undefined)this.controller.cancel().catch((failure: Error) => this.reportError(failure));
+        else this.destroy().catch((failure: Error) => this.reportError(failure));
+        throw error as Error;
+      }
       // Restore the actual native rectangle; keep the last successful logical projection.
       try {if(previous.width>0 && previous.height>0) {await native.resize({width:previous.width,height:previous.height});await native.movePx({x:previous.x,y:previous.y});}}catch(rollback){throw rollback as Error;}
       throw error as Error;

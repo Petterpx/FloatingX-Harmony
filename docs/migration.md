@@ -38,3 +38,5 @@ API12 没有公开原生 hide 窗口接口。system `hide()` 隐藏内容、保�
 BuilderParam 应通过闭包传入父页面的 Builder，例如 `host:() => {this.hostContent();}`，确保状态与按钮回调保持正确拥有者。库内部使用私有 FrameNode/NodeContent 挂载 typed ComponentContent，按当前 UIContext 的真实完整测量更新尺寸；半隐藏只裁剪可见视口，不把可见大小当成内容大小。DisplayOnly 同时禁用整棵内容的交互并透传，不能只用 HitTestMode.None，因为该模式仍允许子节点参与命中。
 
 系统原生窗口首次属性矩形可能尚未就绪。库在内容隐藏且禁止触摸/焦点时提交初始矩形，正式 show 才恢复交互；API12 windowRectChange 确认实际位置，Promise/位置 getter 采用确认值。缺少事件能力或一秒内未确认会报错，不将旧矩形当作移动完成。system hide 保留窗口，cancel 才销毁。
+
+百分比根内容的包含块基准固定为 FxContent 声明的初始 size；节点实际测量不会反向改变该基准，半隐藏也不改变它。同节点数值尺寸更新仍读取真实完整尺寸。系统操作的总期限同时等待原生 API 与矩形确认；无法确认时终止该窗口并取消控制器，后续 show/move/config 拒绝，destroy 仍等待真实平台销毁结果，不把启动清理当作释放完成。

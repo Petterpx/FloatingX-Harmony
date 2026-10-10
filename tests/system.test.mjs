@@ -154,12 +154,12 @@ test('missing rectangle event capability rejects before submitting prepared move
 });
 
 test('controller cancel during hidden preparation never shows business content and destroys the late native surface once',async()=>{
- const b=deferredWindowRect();const gate=deferred();let entered=false;const show=b.window.showWindow;
- b.window.showWindow=async()=>{entered=true;await gate.promise;await show();};
+ const b=deferredWindowRect();const gate=deferred();const entered=deferred();const show=b.window.showWindow;
+ b.window.showWindow=async()=>{entered.resolve();await gate.promise;await show();};
  const source=new ScopeContent();const p=new FxSystemPlatform(new b.api.FxNativeWindowFactory({},source),systemGeometry());
  const {FxController}=require('../work/core/core/FxController.js');const controller=new FxController(p,new FxConfig(),undefined,{error(){}});p.bindController(controller);
  const showing=controller.show();const rejected=assert.rejects(showing,{code:'DESTROYED'});rejected.catch(()=>{});
- for(let i=0;i<30 && !entered;i++)await Promise.resolve();assert.equal(entered,true);assert.equal(b.view.getSnapshot().visible,false);
+ await entered.promise;assert.equal(b.view.getSnapshot().visible,false);
  const cancel=controller.cancel();gate.resolve();await rejected;await cancel;
  assert.equal(b.window.operations.filter(x=>x==='show').length,1);assert.equal(b.window.operations.filter(x=>x==='destroy').length,1);assert.equal(source.disposals,1);assert.equal(controller.isShow(),false);
 });
@@ -177,4 +177,42 @@ test('initial deferred event is consumed by preparation; formal show cannot repl
  await native.prepareGeometry();assert.deepEqual(native.getRect(),{x:0,y:0,width:100,height:100});
  assert.deepEqual(await native.movePx({x:70,y:350}),{x:70,y:350,width:100,height:100});
  await native.show();assert.deepEqual(native.getRect(),{x:70,y:350,width:100,height:100});await native.destroy();
+});
+test('deadline bounds a never-settling native call even after early rectangle; destroys unsafe window and ignores late completion',async()=>{
+ const f=await waitingNativeRect();const gate=deferred();f.b.window.moveWindowTo=async()=>{await f.b.window.invoke('move');await gate.promise;};
+ const set=globalThis.setTimeout,clear=globalThis.clearTimeout;let deadline,cleared=0;
+ globalThis.setTimeout=(callback)=>{deadline=callback;return 1234;};globalThis.clearTimeout=()=>cleared++;
+ try {let settled=false;const moving=f.native.movePx({x:40,y:50}).finally(()=>{settled=true;});const rejected=assert.rejects(moving,{code:'CAPABILITY_UNSUPPORTED'});rejected.catch(()=>{});
+  for(let i=0;i<5;i++)await Promise.resolve();f.commit({left:40,top:50,width:100,height:100});assert.equal(settled,false);assert.equal(cleared,0,'early event must not clear overall deadline');
+  deadline();for(let i=0;i<15;i++)await Promise.resolve();assert.equal(settled,true,'deadline must win pending native API');await rejected;assert.equal(f.b.window.callbacks.size,0);assert.equal(f.b.window.operations.filter(x=>x==='destroy').length,1);
+  await assert.rejects(f.native.movePx({x:60,y:70}),{code:'DESTROYED'});gate.resolve();for(let i=0;i<10;i++)await Promise.resolve();f.commit({left:99,top:99,width:100,height:100});assert.notDeepEqual(f.native.getRect(),{x:99,y:99,width:100,height:100});await f.native.destroy();assert.equal(f.b.window.operations.filter(x=>x==='destroy').length,1);
+ } finally {globalThis.setTimeout=set;globalThis.clearTimeout=clear;gate.resolve();await f.native.destroy();}
+});
+test('direct destruction wins pending native API without falsely completing pending native destruction',async()=>{
+ const f=await waitingNativeRect();const moveGate=deferred(),destroyGate=deferred();f.b.window.moveWindowTo=()=>moveGate.promise;f.b.window.destroyWindow=async()=>{await f.b.window.invoke('destroy');await destroyGate.promise;};
+ const moving=f.native.movePx({x:40,y:50});let rejected=false;const rejection=assert.rejects(moving,{code:'DESTROYED'}).then(()=>{rejected=true;});
+ for(let i=0;i<5;i++)await Promise.resolve();let destroyed=false;const closing=f.native.destroy().then(()=>{destroyed=true;});const closingAgain=f.native.destroy();for(let i=0;i<10;i++)await Promise.resolve();assert.equal(rejected,true);assert.equal(destroyed,false);assert.equal(f.b.window.callbacks.size,0);
+ destroyGate.resolve();await Promise.all([closing,closingAgain,rejection]);moveGate.resolve();f.commit();assert.equal(f.b.window.operations.filter(x=>x==='destroy').length,1);
+});
+test('public cancel proceeds after deadline aborts pending native movement',async()=>{
+ const b=nativeBoundary();const p=new FxSystemPlatform(new b.api.FxNativeWindowFactory({},new ScopeContent()),systemGeometry());const {FxController}=require('../work/core/core/FxController.js');const controller=new FxController(p,new FxConfig({adsorb:false,position:{x:0,y:0}}),undefined,{error(){}});p.bindController(controller);await controller.show();
+ const gate=deferred();b.window.moveWindowTo=()=>gate.promise;const set=globalThis.setTimeout,clear=globalThis.clearTimeout;let deadline;globalThis.setTimeout=(callback)=>{deadline=callback;return 1234;};globalThis.clearTimeout=()=>{};
+ try {const moving=controller.move(40,50,false);moving.catch(()=>{});for(let i=0;i<20&&!deadline;i++)await Promise.resolve();let cancelled=false;const cancel=controller.cancel().then(()=>{cancelled=true;});deadline();for(let i=0;i<50;i++)await Promise.resolve();assert.equal(cancelled,true,'cancel must leave native tail');await cancel;await assert.rejects(moving);assert.equal(controller.getState(),'destroyed');assert.equal(b.window.callbacks.size,0);assert.equal(b.window.operations.filter(x=>x==='destroy').length,1);gate.resolve();
+ }finally {globalThis.setTimeout=set;globalThis.clearTimeout=clear;gate.resolve();await controller.cancel();}
+});
+test('unconfirmed native operation automatically terminates public control; later changes cannot revive it and late rejection is observed',async()=>{
+ const b=nativeBoundary();const p=new FxSystemPlatform(new b.api.FxNativeWindowFactory({},new ScopeContent()),systemGeometry());const {FxController}=require('../work/core/core/FxController.js');const controller=new FxController(p,new FxConfig({adsorb:false,position:{x:0,y:0}}),undefined,{error(){}});p.bindController(controller);await controller.show();
+ const gate=deferred();b.window.moveWindowTo=()=>gate.promise;const set=globalThis.setTimeout,clear=globalThis.clearTimeout;let deadline;globalThis.setTimeout=(callback)=>{deadline=callback;return 1234;};globalThis.clearTimeout=()=>{};
+ try {const moving=controller.move(40,50,false);const rejection=assert.rejects(moving,{code:'DESTROYED'});rejection.catch(()=>{});for(let i=0;i<30&&!deadline;i++)await Promise.resolve();assert.ok(deadline);deadline();for(let i=0;i<70;i++)await Promise.resolve();await rejection;await controller.cancel();assert.equal(controller.getState(),'destroyed');assert.equal(controller.isShow(),false);
+  await assert.rejects(controller.show(),{code:'DESTROYED'});await assert.rejects(controller.move(60,70),{code:'DESTROYED'});await assert.rejects(controller.updateConfig(new FxConfig()),{code:'DESTROYED'});assert.equal(b.window.operations.filter(x=>x==='destroy').length,1);assert.equal(b.window.callbacks.size,0);gate.reject(Object.assign(Error('late native rejection'),{code:997}));for(let i=0;i<10;i++)await Promise.resolve();assert.equal(b.window.operations.filter(x=>x==='destroy').length,1);
+ }finally {globalThis.setTimeout=set;globalThis.clearTimeout=clear;gate.resolve();await controller.cancel();}
+});
+test('native transaction error remains original even if event listener cleanup fails',async()=>{
+ const f=await waitingNativeRect();const original=Object.assign(Error('native move failed'),{code:997});f.b.window.moveWindowTo=async()=>{throw original;};f.b.window.off=()=>{throw Error('listener cleanup failed');};await assert.rejects(f.native.movePx({x:40,y:50}),error=>error===original);await f.native.destroy();
+});
+test('unprepared geometry calls have an API deadline without awaiting impossible pre-show rectangle events',async()=>{
+ for(const name of ['resize','moveWindowTo']){const b=nativeBoundary();const native=await new b.api.FxNativeWindowFactory({},new ScopeContent()).create();const gate=deferred();b.window[name]=()=>gate.promise;const set=globalThis.setTimeout,clear=globalThis.clearTimeout;let deadline;globalThis.setTimeout=callback=>{deadline=callback;return 1234;};globalThis.clearTimeout=()=>{};
+  try {const operation=name==='resize'?native.resize({width:100,height:100}):native.movePx({x:10,y:10});const rejection=assert.rejects(operation,{code:'CAPABILITY_UNSUPPORTED'});rejection.catch(()=>{});deadline();for(let i=0;i<20;i++)await Promise.resolve();await rejection;assert.equal(native.terminated,true);assert.equal(b.window.callbacks.size,0);await native.destroy();assert.equal(b.window.operations.filter(x=>x==='destroy').length,1);gate.resolve();}
+  finally {globalThis.setTimeout=set;globalThis.clearTimeout=clear;gate.resolve();await native.destroy();}
+ }
 });

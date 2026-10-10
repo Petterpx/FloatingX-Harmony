@@ -80,26 +80,35 @@ class FxRectReadback {
   private reject: (error: FxError) => void = (_error: FxError) => {};
   private timer: number = -1;
   private finished: boolean = false;
+  private rect?: FxNativeRect;
+  private nativeCompleted: boolean = false;
   constructor() {
     this.promise=new Promise<FxNativeRect>((resolve,reject) => {this.resolve=resolve;this.reject=reject;});
     // Observe rejection immediately, even when the API throws before the wait starts.
     this.promise.catch(() => {});
-    this.timer=setTimeout(() => this.fail(new FxError('CAPABILITY_UNSUPPORTED','Native rectangle change was not confirmed within one second')),1000);
+    this.timer=setTimeout(() => this.fail(new FxError('CAPABILITY_UNSUPPORTED','Native operation and rectangle were not confirmed within one second')),1000);
   }
   isPending(): boolean {return !this.finished;}
-  complete(rect: FxNativeRect): void {if(!this.finish())return;const resolve=this.resolve;this.clear();resolve(rect);}
+  confirm(rect: FxNativeRect): void {if(this.finished)return;this.rect=rect;this.completeIfReady();}
+  operationCompleted(): void {if(this.finished)return;this.nativeCompleted=true;this.completeIfReady();}
+  private completeIfReady(): void {
+    if(!this.nativeCompleted || this.rect===undefined || !this.finish())return;
+    const resolve=this.resolve;const rect=this.rect;this.clear();resolve(rect);
+  }
   fail(error: FxError): void {if(!this.finish())return;const reject=this.reject;this.clear();reject(error);}
   private finish(): boolean {if(this.finished)return false;this.finished=true;clearTimeout(this.timer);this.timer=-1;return true;}
-  private clear(): void {this.resolve=(_rect: FxNativeRect) => {};this.reject=(_error: FxError) => {};}
+  private clear(): void {this.rect=undefined;this.resolve=(_rect: FxNativeRect) => {};this.reject=(_error: FxError) => {};}
 }
 class FxWindowAdapter implements FxNativeWindow {
   readonly requiresView: boolean = true;
+  get terminated(): boolean {return this.disposed;}
   private native: window.Window;private id: string;private source: FxContentSource;private interactions: FxInteractions;
   private touchable: boolean = true;private focusable: boolean = false;private hidden: boolean = false;
   private prepared: boolean = false;
   private disposed: boolean = false;
   private readbacks: FxRectReadback[] = [];
   private confirmed?: FxNativeRect;
+  private destruction?: Promise<void>;
   constructor(native: window.Window, id: string, source: FxContentSource, interactions: FxInteractions) {this.native=native;this.id=id;this.source=source;this.interactions=interactions;this.focusable=native.getWindowProperties().focusable;}
   async load(owner: FxSystemOwner): Promise<void> {
     pageEntries.set(this.id,new FxSystemPageEntry(owner,this.source,this.interactions));
@@ -116,7 +125,7 @@ class FxWindowAdapter implements FxNativeWindow {
       await this.native.setWindowTouchable(false);await this.native.setWindowFocusable(false);
       const before=this.getRect();
       if(before.width<=0 || before.height<=0)await this.readTransaction(window.RectChangeReason.UNDEFINED,() => this.native.showWindow());
-      else {await this.native.showWindow();this.confirmed=before;}
+      else {await this.readTransaction(window.RectChangeReason.UNDEFINED,() => this.native.showWindow(),false);this.confirmed=before;}
       if(this.disposed)throw new FxError('DESTROYED','Native window is released');
       this.prepared=true;
     } catch(error) {
@@ -126,6 +135,7 @@ class FxWindowAdapter implements FxNativeWindow {
     }
   }
   async show(): Promise<void> {
+    if(this.disposed)throw new FxError('DESTROYED','Native window is released');
     const previous=this.native.getWindowProperties();
     try {await this.native.setWindowTouchable(this.touchable);await this.native.setWindowFocusable(this.touchable && this.focusable);await this.native.showWindow();this.hidden=false;this.prepared=true;}
     catch(error) {await this.restoreInteraction(previous.touchable,previous.focusable);throw error as Error;}
@@ -137,22 +147,27 @@ class FxWindowAdapter implements FxNativeWindow {
   }
   private async restoreInteraction(touchable: boolean, focusable: boolean): Promise<void> {try{await this.native.setWindowTouchable(touchable);}finally{await this.native.setWindowFocusable(focusable);}}
   async destroy(): Promise<void> {
-    if(this.disposed)return;this.disposed=true;
+    if(this.destruction!==undefined)return this.destruction;this.disposed=true;
     const readbacks=this.readbacks;this.readbacks=[];let failure: Error | undefined;
     for(let i=0;i<readbacks.length;i++) {
       readbacks[i].fail(new FxError('DESTROYED','Native window is released'));
       try {readbacks[i].release();} catch(error) {if(failure===undefined)failure=error as Error;}
     }
+    this.destruction=this.destroyNative(failure);return this.destruction;
+  }
+  private async destroyNative(failure?: Error): Promise<void> {
     try {await this.native.destroyWindow();} catch(error) {if(failure===undefined)failure=error as Error;}
     finally {pageEntries.delete(this.id);}
     if(failure!==undefined)throw failure;
   }
   async resize(size: FxSize): Promise<void> {
-    if(!this.prepared) {await this.native.resize(size.width,size.height);return;}
+    if(this.disposed)throw new FxError('DESTROYED','Native window is released');
+    if(!this.prepared) {await this.readTransaction(window.RectChangeReason.UNDEFINED,() => this.native.resize(size.width,size.height),false);return;}
     const before=this.getRect();if(before.width===size.width && before.height===size.height)return;
     await this.readTransaction(window.RectChangeReason.UNDEFINED,() => this.native.resize(size.width,size.height));
   }
   async setTouchable(value: boolean): Promise<void> {
+    if(this.disposed)throw new FxError('DESTROYED','Native window is released');
     const previous=this.native.getWindowProperties();
     try {await this.native.setWindowTouchable(this.hidden?false:value);await this.native.setWindowFocusable(!this.hidden && value && this.focusable);this.touchable=value;}
     catch(error){await this.restoreInteraction(previous.touchable,previous.focusable);throw error as Error;}
@@ -160,12 +175,12 @@ class FxWindowAdapter implements FxNativeWindow {
   async setBackground(color: string): Promise<void> {this.native.setWindowBackgroundColor(color);}
   async movePx(point: FxPoint): Promise<FxNativeRect> {
     if(this.disposed)throw new FxError('DESTROYED','Native window is released');
-    if(!this.prepared) {await this.native.moveWindowTo(point.x,point.y);return this.readProperties();}
+    if(!this.prepared)return this.readTransaction(window.RectChangeReason.MOVE,() => this.native.moveWindowTo(point.x,point.y),false);
     const before=this.getRect();if(before.x===point.x && before.y===point.y)return before;
     return this.readTransaction(window.RectChangeReason.MOVE,() => this.native.moveWindowTo(point.x,point.y));
   }
-  private async readTransaction(reason: window.RectChangeReason, operation: () => Promise<void>): Promise<FxNativeRect> {
-    const before=this.getRect();const wait=new FxRectReadback();this.readbacks.push(wait);let subscribed=false;let submitted=false;let completed=false;
+  private async readTransaction(reason: window.RectChangeReason, operation: () => Promise<void>, confirmEvent: boolean = true): Promise<FxNativeRect> {
+    const before=this.getRect();const wait=new FxRectReadback();this.readbacks.push(wait);let subscribed=false;let submitted=false;let completed=false;let operationSettled=false;let failure: Error | undefined;
     const changed=(event: window.RectChangeOptions) => {
       if(this.disposed || !submitted || !wait.isPending())return;
       if(reason===window.RectChangeReason.MOVE && event.reason!==window.RectChangeReason.MOVE)return;
@@ -173,19 +188,34 @@ class FxWindowAdapter implements FxNativeWindow {
       const rect=event.rect;
       if(!Number.isFinite(rect.left) || !Number.isFinite(rect.top) || !Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width<=0 || rect.height<=0)return;
       const actual: FxNativeRect={x:rect.left,y:rect.top,width:rect.width,height:rect.height};
-      this.confirmed=actual;wait.complete(actual);
+      wait.confirm(actual);
     };
     wait.release=() => {if(subscribed){subscribed=false;this.native.off('windowRectChange',changed);}};
     try {
-      try {this.native.on('windowRectChange',changed);subscribed=true;}
+      try {if(confirmEvent){this.native.on('windowRectChange',changed);subscribed=true;}}
       catch(error) {const native=error as FxWindowError;throw new FxError(native.code===801?'CAPABILITY_UNSUPPORTED':'WINDOW_OPERATION_FAILED',native.message,native.code);}
-      submitted=true;await operation();const actual=await wait.promise;
+      submitted=true;
+      // Both signals must finish before the single overall deadline. An unresolved
+      // native Promise must never keep the queue or event listener alive forever.
+      operation().then(() => {
+        operationSettled=true;
+        try {if(!confirmEvent && wait.isPending())wait.confirm(this.readProperties());wait.operationCompleted();}
+        catch(error) {wait.fail(error as FxError);}
+      },(error: Error) => {operationSettled=true;wait.fail(error as FxError);});
+      const actual=await wait.promise;
       if(this.disposed)throw new FxError('DESTROYED','Native window is released');
-      completed=true;return actual;
+      this.confirmed=actual;completed=true;return actual;
+    } catch(error) {
+      failure=error as Error;
+      // The unconfirmed OS call cannot be canceled. Retire this window rather than allow a
+      // late operation to overwrite a newer transaction; destroy still has to settle.
+      if(submitted && (!operationSettled || error instanceof FxError && error.code==='CAPABILITY_UNSUPPORTED') && !this.disposed)this.destroy().catch(() => {});
+      throw failure;
     } finally {
-      if(submitted && !completed)this.confirmed=undefined;
+      if(submitted && !completed)this.confirmed=this.disposed?before:undefined;
       wait.fail(new FxError('DESTROYED','Native rectangle transaction is released'));
-      try {wait.release();} finally {const index=this.readbacks.indexOf(wait);if(index>=0)this.readbacks.splice(index,1);}
+      try {wait.release();} catch(error) {if(failure===undefined)throw error as Error;}
+      finally {const index=this.readbacks.indexOf(wait);if(index>=0)this.readbacks.splice(index,1);}
     }
   }
   private readProperties(): FxNativeRect {const rect=this.native.getWindowProperties().windowRect;return {x:rect.left,y:rect.top,width:rect.width,height:rect.height};}
