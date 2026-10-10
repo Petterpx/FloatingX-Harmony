@@ -222,6 +222,33 @@ def build(args):
     print(f'Built {tag} at {commit}: {assets}')
 
 
+def provenance_label(tag, commit):
+    return f'FloatingX tag={tag} sourceCommit={commit}'
+
+
+def check_recovery_labels(existing, tag, commit):
+    owned = [asset for name, asset in existing.items() if name in asset_names(tag)]
+    label = provenance_label(tag, commit)
+    if any(asset.get('label') != label for asset in owned):
+        raise ValueError('Existing assets lack matching recovery provenance; refusing replacement')
+
+
+def replace_assets(request, base, upload_url, existing, assets, tag, commit):
+    label = provenance_label(tag, commit)
+    # Preserve source provenance on existing assets before any destructive replacement.
+    # If manifest POST fails after DELETE, these labels allow only same-commit recovery.
+    for name in asset_names(tag):
+        if name in existing and existing[name].get('label') != label:
+            request(base + f'/releases/assets/{existing[name]["id"]}', method='PATCH',
+                    data=json.dumps({'label': label}).encode())
+    for name in ['manifest.json'] + binary_names(tag) + ['SHA256SUMS']:
+        if name in existing:
+            request(base + f'/releases/assets/{existing[name]["id"]}', method='DELETE')
+        query = urllib.parse.urlencode({'name': name, 'label': label})
+        request(upload_url + '?' + query, method='POST',
+                data=(assets / name).read_bytes(), content_type='application/octet-stream')
+
+
 def publish(args):
     """The only operation that needs a write token. Never creates Releases."""
     version_from_tag(args.tag)
@@ -254,15 +281,10 @@ def publish(args):
             raise ValueError('Untrusted manifest download URL')
         with urllib.request.urlopen(url, timeout=60) as response:
             check_existing_manifest(json.load(response), args.tag, args.commit)
-    elif any(name in existing for name in asset_names(args.tag)):
-        raise ValueError('Existing assets lack provenance manifest; refusing replacement')
+    else:
+        check_recovery_labels(existing, args.tag, args.commit)
     upload_url = release['upload_url'].split('{', 1)[0]
-    # Manifest first lets a same-commit rerun repair an interrupted upload.
-    for name in ['manifest.json'] + binary_names(args.tag) + ['SHA256SUMS']:
-        if name in existing:
-            request(base + f'/releases/assets/{existing[name]["id"]}', method='DELETE')
-        request(upload_url + '?name=' + urllib.parse.quote(name, safe=''), method='POST',
-                data=(args.assets / name).read_bytes(), content_type='application/octet-stream')
+    replace_assets(request, base, upload_url, existing, args.assets, args.tag, args.commit)
     print(f'Uploaded four assets to existing Release {args.tag}')
 
 

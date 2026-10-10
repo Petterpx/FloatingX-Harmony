@@ -99,6 +99,44 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 r.verify_packages(out, 'v1.2.3')
 
+    def test_rerun_recovers_if_manifest_upload_fails_after_deletion(self):
+        r = self.implementation()
+        self.assertTrue(hasattr(r, 'replace_assets'), 'recoverable asset replacement is missing')
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            for name in r.binary_names('v1.2.3'):
+                (out / name).write_bytes(b'package')
+            r.write_metadata(out, 'v1.2.3', 'a' * 40, {})
+            assets = {name: {'id': index, 'name': name, 'label': ''}
+                      for index, name in enumerate(r.asset_names('v1.2.3'), 1)}
+            fail_once = [True]
+            def api(url, method='GET', data=None, content_type=None):
+                if method in ['PATCH', 'DELETE']:
+                    identity = int(url.rsplit('/', 1)[1])
+                    name = next(name for name, asset in assets.items() if asset['id'] == identity)
+                    if method == 'DELETE':
+                        del assets[name]
+                    else:
+                        assets[name]['label'] = json.loads(data)['label']
+                elif method == 'POST':
+                    query = r.urllib.parse.parse_qs(r.urllib.parse.urlsplit(url).query)
+                    name = query['name'][0]
+                    if name == 'manifest.json' and fail_once[0]:
+                        fail_once[0] = False
+                        raise ConnectionError('Injected manifest upload failure')
+                    assets[name] = {'id': max([item['id'] for item in assets.values()] + [0]) + 1,
+                                    'name': name, 'label': query['label'][0]}
+            base = 'https://api.github.com/repos/owner/repo'
+            upload = 'https://uploads.github.com/repos/owner/repo/releases/1/assets'
+            with self.assertRaises(ConnectionError):
+                r.replace_assets(api, base, upload, dict(assets), out, 'v1.2.3', 'a' * 40)
+            self.assertNotIn('manifest.json', assets)
+            r.check_recovery_labels(assets, 'v1.2.3', 'a' * 40)
+            with self.assertRaises(ValueError):
+                r.check_recovery_labels(assets, 'v1.2.3', 'b' * 40)
+            r.replace_assets(api, base, upload, dict(assets), out, 'v1.2.3', 'a' * 40)
+            self.assertEqual(set(assets), set(r.asset_names('v1.2.3')))
+
     def test_manifest_detects_tamper_and_rejects_commit_replacement(self):
         r = self.implementation()
         with tempfile.TemporaryDirectory() as tmp:
