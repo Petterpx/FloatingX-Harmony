@@ -273,7 +273,14 @@ def publish(args):
     if current['sha'] != args.commit:
         raise ValueError('Tag changed after build; refusing upload')
     existing = {asset['name']: asset for asset in release['assets']}
-    if 'manifest.json' in existing:
+    manifest_asset = existing.get('manifest.json')
+    if manifest_asset is not None and manifest_asset.get('state') == 'starter':
+        # GitHub may retain an empty starter asset after a failed (e.g. 502) POST.
+        # Never parse it as a manifest; recovery still requires every target label.
+        check_recovery_labels(existing, args.tag, args.commit)
+    elif manifest_asset is not None:
+        if manifest_asset.get('state') != 'uploaded':
+            raise ValueError('Unexpected manifest asset state; refusing replacement')
         # This repository is public. Use its public download URL without forwarding credentials.
         url = existing['manifest.json']['browser_download_url']
         expected_prefix = f'https://github.com/{args.repository}/releases/download/'

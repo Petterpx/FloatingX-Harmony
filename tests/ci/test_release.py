@@ -1,4 +1,5 @@
 import hashlib
+import argparse
 import importlib.util
 import io
 import tarfile
@@ -8,6 +9,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 SCRIPT = Path(__file__).resolve().parents[2] / 'scripts/ci/release.py'
 
@@ -136,6 +138,105 @@ class ReleaseTests(unittest.TestCase):
                 r.check_recovery_labels(assets, 'v1.2.3', 'b' * 40)
             r.replace_assets(api, base, upload, dict(assets), out, 'v1.2.3', 'a' * 40)
             self.assertEqual(set(assets), set(r.asset_names('v1.2.3')))
+
+    def github_upload_fixture(self, r, out):
+        # A stateful fake GitHub service: failed POST leaves a server-side starter asset.
+        tag = 'v1.2.3'; commit = 'a' * 40
+        for name in r.binary_names(tag):
+            (out / name).write_bytes(b'package')
+        r.write_metadata(out, tag, commit, {})
+        state = {'commit': commit, 'fail': True, 'mutations': 0}
+        assets = {name: {'id': index, 'name': name, 'label': '', 'state': 'uploaded',
+                        'browser_download_url': f'https://github.com/owner/repo/releases/download/{tag}/{name}',
+                        'data': (out / name).read_bytes()}
+                  for index, name in enumerate(r.asset_names(tag), 1)}
+        def urlopen(request, timeout=None):
+            url = request if isinstance(request, str) else request.full_url
+            method = 'GET' if isinstance(request, str) else request.get_method()
+            if method == 'GET':
+                if '/releases/tags/' in url:
+                    payload = {'draft': False, 'tag_name': tag,
+                        'upload_url': 'https://uploads.github.com/repos/owner/repo/releases/1/assets{?name,label}',
+                        'assets': [{key: value for key, value in asset.items() if key != 'data'}
+                                   for asset in assets.values()]}
+                elif '/commits/' in url:
+                    payload = {'sha': state['commit']}
+                else:
+                    return io.BytesIO(assets[url.rsplit('/', 1)[1]]['data'])
+                return io.BytesIO(json.dumps(payload).encode())
+            state['mutations'] += 1
+            if method in ['PATCH', 'DELETE']:
+                identity = int(url.rsplit('/', 1)[1])
+                name = next(name for name, asset in assets.items() if asset['id'] == identity)
+                if method == 'DELETE':
+                    del assets[name]
+                else:
+                    assets[name]['label'] = json.loads(request.data)['label']
+                return io.BytesIO(b'{}')
+            query = r.urllib.parse.parse_qs(r.urllib.parse.urlsplit(url).query)
+            name = query['name'][0]
+            fail = name == 'manifest.json' and state['fail']
+            assets[name] = {'id': max([item['id'] for item in assets.values()] + [0]) + 1,
+                'name': name, 'label': query['label'][0], 'state': 'starter' if fail else 'uploaded',
+                'data': b'' if fail else request.data,
+                'browser_download_url': f'https://github.com/owner/repo/releases/download/{tag}/{name}'}
+            if fail:
+                state['fail'] = False
+                error = r.urllib.error.HTTPError(url, 502, 'Injected upstream failure after asset creation', {}, io.BytesIO(b''))
+                error.close()
+                raise error
+            return io.BytesIO(b'{}')
+        args = argparse.Namespace(tag=tag, commit=commit, assets=out, repository='owner/repo')
+        return args, assets, state, urlopen
+
+    def test_starter_manifest_from_failed_post_is_recoverable(self):
+        r = self.implementation()
+        with tempfile.TemporaryDirectory() as tmp:
+            args, assets, state, urlopen = self.github_upload_fixture(r, Path(tmp))
+            with patch.dict(r.os.environ, {'GH_TOKEN': 'test-token'}), patch.object(r.urllib.request, 'urlopen', urlopen):
+                with self.assertRaises(r.urllib.error.HTTPError):
+                    r.publish(args)
+                self.assertEqual(assets['manifest.json']['state'], 'starter')
+                self.assertEqual(assets['manifest.json']['data'], b'')
+                r.publish(args)
+            self.assertEqual(set(assets), set(r.asset_names(args.tag)))
+            self.assertTrue(all(asset['state'] == 'uploaded' for asset in assets.values()))
+            for name, asset in assets.items():
+                self.assertEqual(asset['data'], (args.assets / name).read_bytes())
+
+    def test_starter_recovery_rejects_missing_labels_and_different_commit(self):
+        r = self.implementation()
+        for failure in ['manifest-label', 'binary-label', 'new-source-commit', 'moved-remote-tag']:
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as tmp:
+                args, assets, state, urlopen = self.github_upload_fixture(r, Path(tmp))
+                with patch.dict(r.os.environ, {'GH_TOKEN': 'test-token'}), patch.object(r.urllib.request, 'urlopen', urlopen):
+                    with self.assertRaises(r.urllib.error.HTTPError):
+                        r.publish(args)
+                    if failure == 'manifest-label':
+                        assets['manifest.json']['label'] = ''
+                    elif failure == 'binary-label':
+                        assets[r.binary_names(args.tag)[0]]['label'] = ''
+                    elif failure == 'new-source-commit':
+                        args.commit = 'b' * 40; state['commit'] = args.commit
+                        r.write_metadata(args.assets, args.tag, args.commit, {})
+                    else:
+                        state['commit'] = 'b' * 40
+                    mutations = state['mutations']
+                    with self.assertRaisesRegex(ValueError, 'provenance|Tag changed'):
+                        r.publish(args)
+                    self.assertEqual(state['mutations'], mutations)
+
+    def test_uploaded_invalid_manifest_never_falls_back_to_labels(self):
+        r = self.implementation()
+        with tempfile.TemporaryDirectory() as tmp:
+            args, assets, state, urlopen = self.github_upload_fixture(r, Path(tmp))
+            for asset in assets.values():
+                asset['label'] = r.provenance_label(args.tag, args.commit)
+            assets['manifest.json']['data'] = b'not JSON'
+            with patch.dict(r.os.environ, {'GH_TOKEN': 'test-token'}), patch.object(r.urllib.request, 'urlopen', urlopen):
+                with self.assertRaises(json.JSONDecodeError):
+                    r.publish(args)
+            self.assertEqual(state['mutations'], 0)
 
     def test_manifest_detects_tamper_and_rejects_commit_replacement(self):
         r = self.implementation()
