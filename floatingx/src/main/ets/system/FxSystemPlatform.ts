@@ -134,17 +134,18 @@ export class FxSystemPlatform implements FxPlatform {
       this.positioned=true;this.projection={position:{x:actual.x/d,y:actual.y/d},visibleSize:projection.visibleSize,contentOffset:projection.contentOffset};
       if(this.view!==undefined)this.view.adoptPosition(this.position);
     } catch(error) {
-      if(native.terminated===true) {
-        // Cancellation marks the public control terminal immediately, but its
-        // queued cleanup must run after this transaction returns, never be awaited here.
-        if(this.controller!==undefined)this.controller.cancel().catch((failure: Error) => this.reportError(failure));
-        else this.destroy().catch((failure: Error) => this.reportError(failure));
-        throw error as Error;
-      }
+      if(this.cancelIfTerminated(native))throw error as Error;
       // Restore the actual native rectangle; keep the last successful logical projection.
-      try {if(previous.width>0 && previous.height>0) {await native.resize({width:previous.width,height:previous.height});await native.movePx({x:previous.x,y:previous.y});}}catch(rollback){throw rollback as Error;}
+      try {if(previous.width>0 && previous.height>0) {await native.resize({width:previous.width,height:previous.height});await native.movePx({x:previous.x,y:previous.y});}}catch(rollback){this.cancelIfTerminated(native);throw rollback as Error;}
       throw error as Error;
     }
+  }
+  private cancelIfTerminated(native: FxNativeWindow): boolean {
+    if(native.terminated!==true)return false;
+    // Mark public state terminal now; queued cleanup must not be awaited inside its own transaction.
+    if(this.controller!==undefined)this.controller.cancel().catch((failure: Error) => this.reportError(failure));
+    else this.destroy().catch((failure: Error) => this.reportError(failure));
+    return true;
   }
   private async cleanupNative(): Promise<void> {
     const native=this.native;this.native=undefined;const view=this.view;this.view=undefined;

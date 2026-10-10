@@ -8,13 +8,13 @@
 
 | 关口 | 本轮结果 | 证据 |
 | --- | --- | --- |
-| 工作树实际核心源码编译/测试 | Task9首轮全量193/193（d6a1af7）；review后受影响 content/scope/system 70/70，fail/skipped/cancelled 均0 | `work/task9-acceptance-core.log`；review `work/task9-review-core-build.log` 与 `work/task9-review-final-focused3.log` |
-| 官方 API12 严格 ArkTS 核心镜像检查 | 实现并通过：0 diagnostics，16 文件（含声明入口） | `work/task9-review-delivery-strict.log` |
-| 商业 HarmonyOS SDK26 HAR | 实现并通过：真实 HarCompileArkTS/PackageHar，exit 0 | `work/task9-review-delivery-commercial-har.log` |
-| 商业 SDK26 全部示例 HAP | 实现并通过：真实 CompileArkTS/PackageHap，exit 0 | `work/task9-review-delivery-commercial-hap.log` |
-| 商业 SDK26 Hypium HAP | 实现并通过：真实 OhosTestCompileArkTS/PackageHap，exit 0 | `work/task9-review-delivery-commercial-hypium.log` |
-| 独立消费者安装 packaged 商业 HAR | 实现并通过：仅 entry 源模块、公开 app/scope 入口、source/HAP 无系统权限；OHPM/HAP exit 0 | `work/task9-review-delivery-consumer-{ohpm,hap}.log`、`work/task9-review-delivery-consumer-proof.json` |
-| 公开 OpenHarmony API12 HAR/HAP/Hypium | 实现并通过：三项真实构建 exit 0 | `work/task9-review-delivery-public12-{har,hap,hypium}.log` |
+| 工作树实际核心源码编译/测试 | Task9首轮全量193/193（d6a1af7）；review首轮 content/scope/system 70/70，第二轮 rollback 异常修复 system45/45；fail/skipped/cancelled 均0 | `work/task9-acceptance-core.log`；review `work/task9-review-core-build.log` 与 `work/task9-review-final-focused3.log`、`work/task9-review2-green.log` |
+| 官方 API12 严格 ArkTS 核心镜像检查 | 实现并通过：0 diagnostics，16 文件（含声明入口） | `work/task9-review2-strict.log` |
+| 商业 HarmonyOS SDK26 HAR | 实现并通过：真实 HarCompileArkTS/PackageHar，exit 0 | `work/task9-review2-delivery-commercial-har.log` |
+| 商业 SDK26 全部示例 HAP | 实现并通过：真实 CompileArkTS/PackageHap，exit 0 | `work/task9-review2-delivery-commercial-hap.log` |
+| 商业 SDK26 Hypium HAP | 实现并通过：真实 OhosTestCompileArkTS/PackageHap，exit 0 | `work/task9-review2-delivery-commercial-hypium.log` |
+| 独立消费者安装 packaged 商业 HAR | 实现并通过：仅 entry 源模块、公开 app/scope 入口、source/HAP 无系统权限；OHPM/HAP exit 0 | `work/task9-review2-delivery-consumer-{ohpm,hap}.log`、`work/task9-review2-delivery-consumer-proof.json` |
+| 公开 OpenHarmony API12 HAR/HAP/Hypium | 实现并通过：三项真实构建 exit 0 | `work/task9-review2-delivery-public12-{har,hap,hypium}.log` |
 | Hypium 真正执行 | 实现并通过：2/2，Failure/Error/Ignore 均 0，TestFinished-ResultCode 0 | `work/task9-hypium-run.log` |
 | packaged HAR 消费者 UI smoke | 实现并通过：下列已列出的 phone 模拟器场景，exit 0 | `work/task9-delivery-device-smoke.log`、`work/task9-delivery-device/commands.json` 与逐场景布局 |
 | git diff 空白检查 | 提交前通过 | `git diff --check`，完整命令表在 Task9 本地报告 |
@@ -56,7 +56,7 @@
 | §5 DisplayOnly 内容不可交互且透传 | hit-test 文档与原生回归，已修复子节点仍参与命中 | 让内按钮与外按钮重叠后实际点到外按钮；恢复 Normal/ClickOnly 后内按钮响应；实现并通过（scope） |
 | §5 显隐/移动动画、过期回调 | animation/controller/scope/system | 真实 show/hide/program move 已刷新；抢占/迟到动画仍主要为替身证据；实现但待完整平台验收 |
 | §5–6 半隐藏四边、完整尺寸、命中区与展开 | geometry、system、content-mount、scope | scope 四边稳定半尺寸、完整内容始终 220×110vp，关闭半隐藏后展开；实现并通过；system 四边未执行，仍待平台验收 |
-| §6 同节点内容尺寸变化与 px/vp | 当前 UIContext 转换、私有完整测量、native 树尺寸通知、迟到观察者测试 | 同商业 packaged HAR 的无权限 resize fixture，在半隐藏时 220→260→180vp，投影为 110→130→90vp；同 native Column id；实现并通过此尺寸路径；review 后相同最终 HAR 的50%根重复显隐/半隐藏/恢复保持110vp，数值grow/shrink及百分比恢复通过（`work/task9-review-device.log`） |
+| §6 同节点内容尺寸变化与 px/vp | 当前 UIContext 转换、私有完整测量、native 树尺寸通知、迟到观察者测试 | 同商业 packaged HAR 的无权限 resize fixture，在半隐藏时 220→260→180vp，投影为 110→130→90vp；同 native Column id；实现并通过此尺寸路径；review 首轮实际 HAR 的50%根重复显隐/半隐藏/恢复保持110vp，数值grow/shrink及百分比恢复通过（`work/task9-review-device.log`） |
 | §6 旋转、分屏、缩放、安全区、键盘 | geometry restore、目标显示屏/密度替身测试与宿主适配代码 | 实际旋转/分屏/键盘/多密度显示屏切换未执行；实现但待平台验收；当前普通主窗口不能代表这些场景 |
 | §6 Preferences 重启恢复、异步 load/save/clear | storage（含真实 Preferences 类边界）、恢复前首次显示、move 作废迟到 load | 真正跨进程 Preferences 重启未执行；实现但待平台验收 |
 | §7 队列、move 合并、重入回调、错误可见且不泄露业务内容 | controller/api-contract/storage；测试含 secret business payload 消毒断言 | 核心通过；设备故障注入/全量 native 资源统计未执行 |
@@ -83,7 +83,7 @@
 4. DisplayOnly 的 None 仍让原生子按钮命中：整棵内容额外 enabled(false)，恢复其他模式后 enabled(true)。[官方 HitTestMode 说明](https://raw.githubusercontent.com/openharmony/docs/OpenHarmony-5.0.0-Release/zh-cn/application-dev/reference/apis-arkui/arkui-ts/ts-universal-attributes-hit-test-behavior.md) 明确 None 不阻塞子节点。
 5. 示例 BuilderParam 的 this 指向子 Host，父 message 空白：使用闭包保持父页面状态与按钮拥有者。
 6. 系统原生 resize/move 在首次 show 前已成功，属性矩形仍为 0×0；对无效矩形 rollback 又报401，掩盖初错。以透明、内容 Hidden、touch/focus false 的预就绪 show 提交初始矩形；无效旧矩形不 rollback，正式 show 才恢复交互。
-7. 单个 idle 帧仍返回拖动的旧尾点。改为 API12 windowRectChange 实际矩形事件确认、提交前监听、串行投影、无变化直接返回，支持合法夹取的 actual 坐标。预就绪也消耗首次延迟事件，正式 show 不覆盖确认值；timeout/destroy 解除精确监听，缺少该能力时明确拒绝。review 后一秒总期限覆盖原生调用与矩形确认，早到矩形不提前清期限；未确认原生调用使窗口终止并启动真实销毁，Platform/Core 同步取消，后续修改不能复活，迟到 resolve/reject 均被观察。重复 destroy 等同一实际销毁 Promise。
+7. 单个 idle 帧仍返回拖动的旧尾点。改为 API12 windowRectChange 实际矩形事件确认、提交前监听、串行投影、无变化直接返回，支持合法夹取的 actual 坐标。预就绪也消耗首次延迟事件，正式 show 不覆盖确认值；timeout/destroy 解除精确监听，缺少该能力时明确拒绝。review 后一秒总期限覆盖原生调用与矩形确认，早到矩形不提前清期限；未确认原生调用使窗口终止并启动真实销毁，Platform/Core 同步取消，后续修改不能复活，迟到 resolve/reject 均被观察。重复 destroy 等同一实际销毁 Promise。第二轮修复让 rollback 自身超时退役时也调用同一公共终止处理，不遗留 visible/ready 控制器。
 
 RED 证据为修复前真实布局 `work/task9-consumer-layout.json`、DisplayOnly 失败日志 `work/task9-final-device-smoke.log`、content bridge/裁剪测量失败测试、系统原生 projection/rollback 阶段日志及 `work/task9-system-events-device.log` 的旧位置断言失败。GREEN 为 `work/task9-delivery-device-smoke.log`、`work/task9-resize-device.log`、`work/task9-events-preparation-device.log` 及首轮193/193核心与review后70/70受影响测试。旧失败 smoke 不记为通过。
 
@@ -91,7 +91,7 @@ RED 证据为修复前真实布局 `work/task9-consumer-layout.json`、DisplayOn
 
 普通安装的系统测试消费者只声明原有 SYSTEM_FLOAT_WINDOW；模拟器 checkAccessToken 返回已授予，未更改安全设置/ACL/授权。首次 strict getter20,100vp 对应物理70,350px；拖动100px后 getter48.5714,128.5714vp 对应物理170,450px。DisplayOnly 系统内容仍可见，UITest 不提供该不可交互窗口的树，因此另用截图与实际重叠点击底层 app 关闭按钮验收；坐标和 visible 状态稳定。恢复 Normal、hide/show、owner close 均通过。无权限独立包实际 strict PERMISSION_DENIED、显式 fallback 回调 actualScope=app、关闭通过。日志 `work/task9-events-preparation-device.log`，早一轮相同可见内容/交互配置截图 `work/task9-system-displayonly.png`；当时 fixture 证明保留于 `work/task9-pre-review-device-proof.json`；review 后最终 fixture HAR/源码相等证明与 SHA 在 `work/task9-final-device-proof.json`。
 
-app/scope 的完整22项 smoke、旧动态尺寸、Hypium2/2使用先前商业 HAR `ef366cf7af4d28ff5bc76a2d94f1c9e763b01d13550b49b3c0c311c2fac8eb0f`（`task9-delivery-*`）；首次 system 回放使用后续已记录哈希。review 又修改了 content 百分比基准及 system 期限/终止语义，因此最终 content 与旧 smoke 不再逐字一致。最终 HAR 在独立百分比/system 消费者中 byte-identical，证明见 `work/task9-final-device-proof.json`；只重跑受影响的百分比重复布局/半隐藏/恢复、同节点数值 grow/shrink，以及 system strict/config/drag 位置/关闭。结果日志 `work/task9-review-device.log` 与逐条命令 `work/task9-review-device-commands.json`。未宣称重新运行完整22项、Hypium或新增设备矩阵；最终测试 HAP 为构建验证。
+app/scope 的完整22项 smoke、旧动态尺寸、Hypium2/2使用先前商业 HAR `ef366cf7af4d28ff5bc76a2d94f1c9e763b01d13550b49b3c0c311c2fac8eb0f`（`task9-delivery-*`）；首次 system 回放使用后续已记录哈希。review 又修改了 content 百分比基准及 system 期限/终止语义，因此最终 content 与旧 smoke 不再逐字一致。review 首轮实际 HAR `257c17b0641a71aa642f4ee3e1ce9bc84d41a2ff209a0db322b2291d48413511` 在独立百分比/system 消费者中 byte-identical；该轮只重跑百分比重复布局/半隐藏/恢复、同节点数值 grow/shrink，以及 system strict/config/drag 位置/关闭。第二轮只改变 FxSystemPlatform 的 rollback 失败终止路径，最终 HAR 再次刷新；正向路径不变，本轮没有重复设备回放。最新 proof `work/task9-final-device-proof.json` 明列最终和已执行设备哈希及唯一源码差异。结果日志 `work/task9-review-device.log` 与逐条命令 `work/task9-review-device-commands.json`。未宣称重新运行完整22项、Hypium或新增设备矩阵；最终测试 HAP 为构建验证。
 
 [HarmonyOS V5 政策](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-v5/restricted-permissions-V5)将 SYSTEM_FLOAT_WINDOW 限定为批准的 2in1 场景。模拟器正向 TYPE_FLOAT 不能证明商业授权。system hide 保留 native 窗口，隐藏内容并禁 touch/focus，cancel 才销毁；透明阴影、焦点、真正跨应用及 system 半隐藏四边仍需合规设备验收。
 
@@ -99,4 +99,4 @@ app/scope 的完整22项 smoke、旧动态尺寸、Hypium2/2使用先前商业 H
 
 未完成的交付项：API12 phone 真机、tablet；实际旋转/分屏/键盘/安全区变化；双指完整组合；Dialog 真正重叠层级；原生 Preferences 重启；所有 gravity/多实例/native 故障压力；有批准商业系统设备上的跨应用显示、尺寸/四边、hide 阴影/焦点/触摸及 Ability owner 销毁。按 §8 逐项补型号、OS/API、动作、结果和证据，失败后只重跑受影响测试/构建。
 
-最终七个 HAR/HAP 的路径、大小和 SHA256 在 `work/task9-review-delivery-artifacts.json`；可复现命令与完整原始退出码在 `work/task9-commands.json`，设备 smoke 逐条命令在 `work/task9-delivery-device/commands.json`。本地 SDD Task9 报告记录自审与提交，独立 Task9/整分支审查由统筹在提交后执行，不能把本次自审称为独立审查已完成。
+最终七个 HAR/HAP 的路径、大小和 SHA256 在 `work/task9-review2-delivery-artifacts.json`；可复现命令与完整原始退出码在 `work/task9-commands.json`，设备 smoke 逐条命令在 `work/task9-delivery-device/commands.json`。本地 SDD Task9 报告记录自审与提交，独立 Task9/整分支审查由统筹在提交后执行，不能把本次自审称为独立审查已完成。

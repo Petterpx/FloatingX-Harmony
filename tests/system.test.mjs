@@ -216,3 +216,11 @@ test('unprepared geometry calls have an API deadline without awaiting impossible
   finally {globalThis.setTimeout=set;globalThis.clearTimeout=clear;gate.resolve();await native.destroy();}
  }
 });
+test('rollback deadline after ordinary move failure terminates public control and cannot revive the retired window',async()=>{
+ const b=nativeBoundary();const p=new FxSystemPlatform(new b.api.FxNativeWindowFactory({},new ScopeContent()),systemGeometry());const {FxController}=require('../work/core/core/FxController.js');const controller=new FxController(p,new FxConfig({adsorb:false,position:{x:0,y:0}}),undefined,{error(){}});p.bindController(controller);await controller.show();
+ const late=deferred();let calls=0;b.window.moveWindowTo=async(x,y)=>{await b.window.invoke('move');if(++calls===1){b.window.properties.windowRect.left=x;b.window.properties.windowRect.top=y;throw Object.assign(Error('ordinary move failure after partial native movement'),{code:997});}await late.promise;};
+ const set=globalThis.setTimeout,clear=globalThis.clearTimeout;let deadline;globalThis.setTimeout=callback=>{deadline=callback;return 1234;};globalThis.clearTimeout=()=>{};
+ try {const moving=controller.move(40,50);const rejection=assert.rejects(moving,{code:'DESTROYED'});rejection.catch(()=>{});for(let i=0;i<50&&calls<2;i++)await Promise.resolve();assert.equal(calls,2,'ordinary failure must reach actual rollback call');deadline();for(let i=0;i<70;i++)await Promise.resolve();assert.equal(controller.getState(),'destroyed');assert.equal(controller.isShow(),false);assert.equal(p.isReadyToShow(),false);await rejection;
+  await assert.rejects(controller.show(),{code:'DESTROYED'});await assert.rejects(controller.move(60,70),{code:'DESTROYED'});await assert.rejects(controller.updateConfig(new FxConfig()),{code:'DESTROYED'});await controller.cancel();assert.equal(b.window.callbacks.size,0);assert.equal(b.window.operations.filter(x=>x==='destroy').length,1);late.resolve();for(let i=0;i<10;i++)await Promise.resolve();assert.equal(b.window.operations.filter(x=>x==='destroy').length,1);
+ }finally {globalThis.setTimeout=set;globalThis.clearTimeout=clear;late.resolve();await controller.cancel();}
+});

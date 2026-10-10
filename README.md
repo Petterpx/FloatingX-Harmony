@@ -102,7 +102,7 @@ API12 无公开原生窗口 hide：system hide 隐藏内容、保持透明窗口
 
 ## 验证边界
 
-Task9 首轮全量核心测试 **193/193** 通过；review 修复后受影响 content/scope/system **70/70** 通过；商业 HarmonyOS SDK **26.0.0.105 / API26** 的 HAR、全部示例 HAP、Hypium 测试 HAP 编译通过，compatible/target 保持 **API12**。官方 OpenHarmony 5.0.0.71 / API12 的真实 HAR/HAP/Hypium 编译及严格核心 ArkTS 检查也通过。独立消费者安装实际 packaged HAR，源码与 HAP 都未声明系统权限。
+Task9 首轮全量核心测试 **193/193** 通过；review 修复后受影响 content/scope/system **70/70** 通过，随后 rollback 异常修复的 system **45/45** 通过；商业 HarmonyOS SDK **26.0.0.105 / API26** 的 HAR、全部示例 HAP、Hypium 测试 HAP 编译通过，compatible/target 保持 **API12**。官方 OpenHarmony 5.0.0.71 / API12 的真实 HAR/HAP/Hypium 编译及严格核心 ArkTS 检查也通过。独立消费者安装实际 packaged HAR，源码与 HAP 都未声明系统权限。
 
 已有 phone 模拟器报告 **OpenHarmony-6.1.1.125 / API24 / emulator**。普通 unsigned 安装和 app/scope UI 检查可执行；实测修复渲染订阅、内容挂载、半隐藏测量反馈、DisplayOnly 子按钮透传及系统原生矩形延迟回读；百分比包含块采用稳定初始尺寸，测量结果不回写基准。系统总期限覆盖原生调用与矩形确认，超时会终止窗口并取消公共控制器，等待真实销毁结果，后续操作不可复活。系统 strict、拖动坐标、透传、显隐/关闭及无权限显式降级也在这一模拟器通过；不代表商业系统授权。具体已通过场景、设备测试及限制见 [docs/verification.md](docs/verification.md)。API12 真机、平板、有商业授权 TYPE_FLOAT、旋转/键盘/安全区等未验收项目不能由编译或模拟器部分通过外推。工具链与复现见 [docs/toolchain.md](docs/toolchain.md)，迁移差异见 [docs/migration.md](docs/migration.md)。
 
