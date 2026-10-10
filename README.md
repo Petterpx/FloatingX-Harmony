@@ -37,7 +37,7 @@ system 实现不等于普通手机/平板可用。[华为 V5 受限权限文档]
 ```
 
 ```ts
-FloatingXHost({control:this.control,host:this.hostContent}).layoutWeight(1)
+FloatingXHost({control:this.control,host:() => {this.hostContent();}}).layoutWeight(1)
 ```
 
 Host 暂时卸载/重挂保留显示意图；业务结束 cancel 才终止。`show()` 在宿主未挂载时可成功接受意图，实际状态仍 idle/hidden；`isShow()` 或 SHOW 事件才表示已显示。
@@ -102,9 +102,9 @@ API12 无公开原生窗口 hide：system hide 隐藏内容、保持透明窗口
 
 ## 验证边界
 
-已完成公共契约/核心源码测试、官方 OpenHarmony 5.0.0 API12 严格 ArkTS 检查、HAR、全部示例 HAP、Hypium 测试 HAP 编译，并用独立无 SYSTEM_FLOAT_WINDOW 的项目安装实际 packaged HAR 后编译 app/scope 消费代码。上述构建不等于商业 HarmonyOS SDK 或设备验收。
+本轮最终源码核心测试 **193/193** 通过；商业 HarmonyOS SDK **26.0.0.105 / API26** 的 HAR、全部示例 HAP、Hypium 测试 HAP 编译通过，compatible/target 保持 **API12**。官方 OpenHarmony 5.0.0.71 / API12 的真实 HAR/HAP/Hypium 编译及严格核心 ArkTS 检查也通过。独立消费者安装实际 packaged HAR，源码与 HAP 都未声明系统权限。
 
-当前商业 SDK 构建、有权限系统设备与 app/scope 设备运行仍由最终验收覆盖；本任务未签名、安装或操作设备，不声称三模式设备通过。详细工具链及检查矩阵见 [docs/toolchain.md](docs/toolchain.md)，迁移差异见 [docs/migration.md](docs/migration.md)。
+已有 phone 模拟器报告 **OpenHarmony-6.1.1.125 / API24 / emulator**。普通 unsigned 安装和 app/scope UI 检查可执行；实测发现并修复了渲染订阅、内容挂载、半隐藏测量反馈、DisplayOnly 子按钮透传及系统原生矩形延迟回读问题。系统 strict、拖动坐标、透传、显隐/关闭及无权限显式降级也在这一模拟器通过；不代表商业系统授权。具体已通过场景、设备测试及限制见 [docs/verification.md](docs/verification.md)。API12 真机、平板、有商业授权 TYPE_FLOAT、旋转/键盘/安全区等未验收项目不能由编译或模拟器部分通过外推。工具链与复现见 [docs/toolchain.md](docs/toolchain.md)，迁移差异见 [docs/migration.md](docs/migration.md)。
 
 ```sh
 npm install

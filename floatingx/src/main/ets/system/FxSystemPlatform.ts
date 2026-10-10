@@ -122,9 +122,12 @@ export class FxSystemPlatform implements FxPlatform {
     const previous=native.getRect();
     try {
       await native.resize(size);
-      const actual=await native.movePx({x:Math.round(projection.position.x*d),y:Math.round(projection.position.y*d)});
+      let actual=await native.movePx({x:Math.round(projection.position.x*d),y:Math.round(projection.position.y*d)});
+      if((actual.width<=0 || actual.height<=0) && native.prepareGeometry!==undefined) {
+        await native.prepareGeometry();actual=native.getRect();
+      }
       if(this.destroyed || token!==undefined && !this.animation.isCurrent(token)) {
-        await native.resize({width:previous.width,height:previous.height});await native.movePx({x:previous.x,y:previous.y});return;
+        if(previous.width>0 && previous.height>0) {await native.resize({width:previous.width,height:previous.height});await native.movePx({x:previous.x,y:previous.y});}return;
       }
       if(actual.width!==size.width||actual.height!==size.height)throw new FxError('CAPABILITY_UNSUPPORTED','Native window cannot represent requested visible slice');
       this.position={x:logical.x+(actual.x/d-projection.position.x),y:logical.y+(actual.y/d-projection.position.y)};
@@ -132,7 +135,7 @@ export class FxSystemPlatform implements FxPlatform {
       if(this.view!==undefined)this.view.adoptPosition(this.position);
     } catch(error) {
       // Restore the actual native rectangle; keep the last successful logical projection.
-      try {await native.resize({width:previous.width,height:previous.height});await native.movePx({x:previous.x,y:previous.y});}catch(rollback){throw rollback as Error;}
+      try {if(previous.width>0 && previous.height>0) {await native.resize({width:previous.width,height:previous.height});await native.movePx({x:previous.x,y:previous.y});}}catch(rollback){throw rollback as Error;}
       throw error as Error;
     }
   }

@@ -33,4 +33,8 @@ API12 没有公开原生 hide 窗口接口。system `hide()` 隐藏内容、保�
 
 坐标、尺寸和拖动事件统一 vp；原生 window API 的 px 转换只发生在系统边界。切换显示屏/密度使用目标窗口的显示屏信息，不使用无关主窗口的密度。位置持久化默认关闭；app/system storage 只传 namespace 与 storage，内部以安装 scope + tag 生成键；scope 另传业务 key。降级保留安装时的 system scope 存储键，不能与 app 键混用。
 
-真实 OpenHarmony API12 编译、商业 HarmonyOS SDK 编译和设备验收是独立结果；见 [README](../README.md) 与 [工具链记录](toolchain.md)。
+真实 OpenHarmony API12 编译、商业 HarmonyOS SDK26 编译和 API24 phone 模拟器验收分别记录。最低兼容/target 仍为 API12；现代 DevEco 使用配套编译 SDK，根 profile 不固定旧 compileSdkVersion。只有逐项设备证据才表示对应场景已通过，不能外推 API12 真机、平板或商业 system 授权。见 [验收矩阵](verification.md) 与 [工具链记录](toolchain.md)。
+
+BuilderParam 应通过闭包传入父页面的 Builder，例如 `host:() => {this.hostContent();}`，确保状态与按钮回调保持正确拥有者。库内部使用私有 FrameNode/NodeContent 挂载 typed ComponentContent，按当前 UIContext 的真实完整测量更新尺寸；半隐藏只裁剪可见视口，不把可见大小当成内容大小。DisplayOnly 同时禁用整棵内容的交互并透传，不能只用 HitTestMode.None，因为该模式仍允许子节点参与命中。
+
+系统原生窗口首次属性矩形可能尚未就绪。库在内容隐藏且禁止触摸/焦点时提交初始矩形，正式 show 才恢复交互；API12 windowRectChange 确认实际位置，Promise/位置 getter 采用确认值。缺少事件能力或一秒内未确认会报错，不将旧矩形当作移动完成。system hide 保留窗口，cancel 才销毁。

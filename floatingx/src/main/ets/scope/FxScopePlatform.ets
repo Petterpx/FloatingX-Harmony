@@ -91,6 +91,10 @@ export class FxScopePlatform implements FxPlatform {
     if(this.controller !== undefined && this.managesHostVisibility) this.controller.setHostVisible(true).catch(() => {});
   }
   layoutContent(size: FxSize): void {
+    if(this.destroyed)return;
+    if(this.mount!==undefined && this.mount.measure!==undefined) {
+      const full=this.mount.measure();if(full===undefined)return;size=full;
+    }
     if(size.width<=0 || size.height<=0 || (size.width===this.snapshot.size.width && size.height===this.snapshot.size.height)) return;
     this.cancelAnimations(); this.cancelTouch(); this.snapshot.size={width:size.width,height:size.height};
     if(this.positioned) this.position=clamp(this.position,bounds(this.getGeometry())); this.refresh();
@@ -224,7 +228,9 @@ export class FxScopePlatform implements FxPlatform {
   }
   private attachContent(): void {
     if(this.mount!==undefined || this.context===undefined || this.source===undefined) return;
-    this.mount=this.source.create(this.context); this.snapshot.content=this.mount.content; this.attached=true;
+    this.mount=this.source.create(this.context);const mount=this.mount;
+    if(mount.observeSize!==undefined)mount.observeSize((size: FxSize) => {if(this.mount===mount)this.layoutContent(size);});
+    this.snapshot.content=this.mount.content; this.attached=true;
     this.refresh(); this.lifecycle(FxEventType.ATTACH);
   }
   private releaseContent(): void {

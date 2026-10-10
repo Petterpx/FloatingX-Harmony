@@ -22,7 +22,7 @@ test('native animation advances actual frames and cancellation cannot commit sta
 test('controller cancel during native allocation destroys once without showing',async()=>{const {FxController}=require('../work/core/core/FxController.js');const f=new FakeWindowFactory();const gate=deferred();const original=f.create.bind(f);f.create=async()=>{await gate.promise;return original();};const p=new FxSystemPlatform(f,systemGeometry());const controller=new FxController(p,new FxConfig(),undefined,{error(){}});p.bindController(controller);const showing=controller.show();const observed=assert.rejects(showing,{code:'DESTROYED'});await Promise.resolve();await Promise.resolve();const canceled=controller.cancel();gate.resolve();await observed;await canceled;assert.equal(f.native.calls.filter(x=>x==='destroy').length,1);assert.ok(!f.native.calls.includes('show'));});
 test('system eligibility persists when main app is backgrounded and destroy clears delayed native frame',async()=>{const f=new FakeWindowFactory();const p=new FxSystemPlatform(f,systemGeometry());await p.create();assert.equal(p.isHostVisible(),true);await p.show();await p.destroy();assert.equal(p.isHostVisible(),false);assert.equal(f.native.calls.filter(x=>x==='destroy').length,1);});
 import {loadSystemAdapter,ScopeContent,ScopeContext} from './support/FxArkRuntime.mjs';
-function nativeBoundary(){const boundary={grant:0,created:[],permissionReads:[],displayReads:[],display:{width:600,height:1000,densityPixels:2},view:undefined};boundary.window={properties:{displayId:42,focusable:true,touchable:true,windowRect:{left:0,top:0,width:100,height:100}},operations:[],failures:new Map(),getWindowProperties(){return {...this.properties,windowRect:{...this.properties.windowRect}};},async invoke(name){this.operations.push(name);if(this.failures.has(name)){const error=this.failures.get(name);this.failures.delete(name);throw error;}},async setWindowTouchable(value){await this.invoke('touchable');this.properties.touchable=value;},async setWindowFocusable(value){await this.invoke('focusable');this.properties.focusable=value;},async showWindow(){await this.invoke('show');},async destroyWindow(){await this.invoke('destroy');},setWindowBackgroundColor(value){this.operations.push('background');this.background=value;},async resize(width,height){await this.invoke('resize');this.properties.windowRect.width=width;this.properties.windowRect.height=height;},async moveWindowTo(x,y){await this.invoke('move');this.properties.windowRect.left=x;this.properties.windowRect.top=y;},async loadContentByName(name,storage){await this.invoke('load');boundary.route=name;boundary.storage=storage;const entry=boundary.api.FxSystemPageRegistry.find(storage.get('fxSystemInstanceId'));boundary.view=new boundary.api.FxSystemPageView(entry.owner,new ScopeContext(),entry.source,entry.interactions);await boundary.view.create();}};boundary.api=loadSystemAdapter(boundary);return boundary;}
+function nativeBoundary(){const boundary={grant:0,created:[],permissionReads:[],displayReads:[],display:{width:600,height:1000,densityPixels:2},view:undefined};boundary.window={properties:{displayId:42,focusable:true,touchable:true,windowRect:{left:0,top:0,width:100,height:100}},operations:[],failures:new Map(),getWindowProperties(){return {...this.properties,windowRect:{...this.properties.windowRect}};},async invoke(name){this.operations.push(name);if(this.failures.has(name)){const error=this.failures.get(name);this.failures.delete(name);throw error;}},async setWindowTouchable(value){await this.invoke('touchable');this.properties.touchable=value;},async setWindowFocusable(value){await this.invoke('focusable');this.properties.focusable=value;},async showWindow(){await this.invoke('show');},async destroyWindow(){await this.invoke('destroy');},setWindowBackgroundColor(value){this.operations.push('background');this.background=value;},async resize(width,height){await this.invoke('resize');this.properties.windowRect.width=width;this.properties.windowRect.height=height;},async moveWindowTo(x,y){await this.invoke('move');this.properties.windowRect.left=x;this.properties.windowRect.top=y;},async loadContentByName(name,storage){await this.invoke('load');boundary.route=name;boundary.storage=storage;const entry=boundary.api.FxSystemPageRegistry.find(storage.get('fxSystemInstanceId'));boundary.view=new boundary.api.FxSystemPageView(entry.owner,new ScopeContext(),entry.source,entry.interactions);await boundary.view.create();}};boundary.window.callbacks=new Map();boundary.window.on=(name,fn)=>boundary.window.callbacks.set(name,fn);boundary.window.off=(name,fn)=>{if(boundary.window.callbacks.get(name)===fn)boundary.window.callbacks.delete(name);};boundary.window.emitRect=reason=>boundary.window.callbacks.get('windowRectChange')?.({reason,rect:{...boundary.window.properties.windowRect}});const resize=boundary.window.resize;boundary.window.resize=async(w,h)=>{await resize.call(boundary.window,w,h);boundary.window.emitRect(0);};const move=boundary.window.moveWindowTo;boundary.window.moveWindowTo=async(x,y)=>{await move.call(boundary.window,x,y);boundary.window.emitRect(3);};boundary.window.getUIContext=()=>new ScopeContext();boundary.api=loadSystemAdapter(boundary);return boundary;}
 test('real native adapter checks access token lazily and packages named route with per-instance storage',async()=>{const b=nativeBoundary();const source=new ScopeContent();const f=new b.api.FxNativeWindowFactory({},source);assert.equal(b.permissionReads.length,0);await f.checkAccess();assert.deepEqual(b.permissionReads,[[123,'ohos.permission.SYSTEM_FLOAT_WINDOW']]);const p=new FxSystemPlatform(f,systemGeometry());await p.create();assert.equal(b.route,'FloatingXSystemPage');assert.match(b.storage.get('fxSystemInstanceId'),/^FloatingXSystem_/);assert.deepEqual(b.displayReads,[42]);assert.equal(source.mounts.length,1);assert.equal(b.window.background,'#00000000');await p.destroy();assert.equal(b.api.FxSystemPageRegistry.find(b.storage.get('fxSystemInstanceId')),undefined);assert.equal(source.disposals,1);});
 test('API12 hidden system surface is invisible, non-touchable and non-focusable; show restores target properties',async()=>{const b=nativeBoundary();const p=new FxSystemPlatform(new b.api.FxNativeWindowFactory({},new ScopeContent()),systemGeometry());await p.create();await p.applyConfig(new FxConfig({adsorb:false}));await p.show();await p.hide();assert.equal(b.view.getSnapshot().visible,false);assert.equal(b.window.properties.touchable,false);assert.equal(b.window.properties.focusable,false);await p.show();assert.equal(b.window.properties.touchable,true);assert.equal(b.window.properties.focusable,true);await p.applyConfig(new FxConfig({displayMode:'display-only'}));await p.hide();await p.show();assert.equal(b.window.properties.touchable,false);assert.equal(b.window.properties.focusable,false);await p.destroy();});
 test('hide native property failure rejects and restores visible interaction state',async()=>{const b=nativeBoundary();const p=new FxSystemPlatform(new b.api.FxNativeWindowFactory({},new ScopeContent()),systemGeometry());await p.create();await p.applyConfig(new FxConfig());await p.show();b.window.failures.set('focusable',Error('focus failure'));await assert.rejects(p.hide(),/focus failure/);assert.equal(b.window.properties.touchable,true);assert.equal(b.window.properties.focusable,true);assert.equal(b.view.getSnapshot().visible,true);await p.destroy();});
@@ -77,4 +77,104 @@ test('superseded native move restores its last rectangle if the queued configura
  const moving=p.move({x:0,y:30},false);await started.promise;f.native.errors.set('touchable',Error('config touchability failed'));
  const configuring=p.applyConfig(new FxConfig({halfHide:true,edgeAdsorb:FxEdgeAdsorb.LEFT}));const rejected=assert.rejects(configuring,/config touchability failed/);gate.resolve();await moving;await rejected;
  assert.deepEqual(p.getPosition(),{x:0,y:20});assert.equal(f.native.getRect().y,20);await p.destroy();
+});
+
+test('system view reports measured full content to native owner, never clipped area or late disposed resize',async()=>{
+ const b=nativeBoundary();const source=new ScopeContent();let full={width:50,height:50};let observer;
+ source.create=()=>({content:{},measure:()=>full,observeSize:callback=>{observer=callback;},dispose(){}});
+ const input=systemGeometry();const reported=[];
+ const owner={getGeometry:()=>input,getProjection:()=>({position:{x:0,y:0},visibleSize:{width:25,height:50},contentOffset:{x:-25,y:0}}),attachView(){},detachView(){},layoutContent(size){reported.push({...size});input.content={...size};}};
+ const view=new b.api.FxSystemPageView(owner,new ScopeContext(),source,{});await view.create();
+ view.layoutContent({width:25,height:50});assert.deepEqual(input.content,{width:50,height:50});assert.deepEqual(reported,[]);
+ full={width:80,height:60};observer(full);assert.deepEqual(input.content,full);assert.deepEqual(reported,[full]);
+ await view.destroy();observer({width:99,height:99});assert.deepEqual(reported,[full]);
+});
+
+function deferredWindowRect() {
+ const b=nativeBoundary();let ready=false;const target={left:0,top:0,width:0,height:0};
+ b.window.getWindowProperties=()=>({...b.window.properties,windowRect:ready?{...target}:{left:0,top:0,width:0,height:0}});
+ b.window.resize=async(width,height)=>{await b.window.invoke('resize');if(width<=0||height<=0)throw Object.assign(Error('invalid zero rollback'),{code:401});target.width=width;target.height=height;if(ready)b.window.callbacks.get('windowRectChange')?.({reason:0,rect:{...target}});};
+ b.window.moveWindowTo=async(x,y)=>{await b.window.invoke('move');target.left=x;target.top=y;if(ready)b.window.callbacks.get('windowRectChange')?.({reason:3,rect:{...target}});};
+ b.window.showWindow=async()=>{await b.window.invoke('show');ready=true;b.window.callbacks.get('windowRectChange')?.({reason:3,rect:{...target}});};
+ return b;
+}
+test('first hidden native rectangle is prepared after requested geometry without marking content visible or restoring interaction early',async()=>{
+ const b=deferredWindowRect();const p=new FxSystemPlatform(new b.api.FxNativeWindowFactory({},new ScopeContent()),systemGeometry());
+ await p.create();assert.deepEqual(b.window.getWindowProperties().windowRect,{left:0,top:0,width:100,height:100});
+ assert.equal(b.view.getSnapshot().visible,false);assert.equal(b.window.properties.touchable,false);assert.equal(b.window.properties.focusable,false);
+ const requested=b.window.operations.indexOf('move');assert.ok(requested>=0 && requested<b.window.operations.indexOf('show'));
+ await p.applyConfig(new FxConfig({adsorb:false}));assert.equal(b.window.properties.touchable,false);assert.equal(b.window.properties.focusable,false);
+ await p.show();assert.equal(b.view.getSnapshot().visible,true);assert.equal(b.window.properties.touchable,true);assert.equal(b.window.properties.focusable,true);await p.destroy();
+});
+test('native preparation failure retains original code and releases allocated window, page, view and listener',async()=>{
+ const b=deferredWindowRect();const source=new ScopeContent();b.window.failures.set('show',Object.assign(Error('native ready failure'),{code:997}));
+ const p=new FxSystemPlatform(new b.api.FxNativeWindowFactory({},source),systemGeometry());
+ await assert.rejects(p.create(),{code:'WINDOW_OPERATION_FAILED',platformCode:997,message:'native ready failure'});
+ assert.equal(b.window.operations.filter(x=>x==='destroy').length,1);assert.equal(source.disposals,1);assert.equal(b.displayListener,undefined);
+ assert.equal(b.api.FxSystemPageRegistry.find(b.storage.get('fxSystemInstanceId')),undefined);
+});
+test('invalid initial zero rectangle is never rolled back and cannot mask unsupported readback with parameter error',async()=>{
+ const f=new FakeWindowFactory();const originalRect=f.native.getRect.bind(f.native);const originalResize=f.native.resize.bind(f.native);const sizes=[];
+ f.native.getRect=()=>({...originalRect(),width:0,height:0});
+ f.native.resize=async size=>{sizes.push({...size});if(size.width<=0 || size.height<=0)throw Object.assign(Error('invalid rollback'),{code:401});await originalResize(size);};
+ f.native.movePx=async()=>f.native.getRect();
+ const p=new FxSystemPlatform(f,systemGeometry());await assert.rejects(p.create(),{code:'CAPABILITY_UNSUPPORTED'});assert.deepEqual(sizes,[{width:50,height:50}]);assert.equal(f.native.releaseCount,1);
+});
+
+async function waitingNativeRect() {
+ const b=nativeBoundary();const events=[];let current={left:0,top:0,width:100,height:100};let pending={...current};
+ b.window.getWindowProperties=()=>({...b.window.properties,windowRect:{...current}});
+ b.window.moveWindowTo=async(x,y)=>{await b.window.invoke('move');pending={...current,left:x,top:y};};
+ const on=b.window.on;b.window.on=(name,callback)=>{events.push(callback);on(name,callback);};
+ const native=await new b.api.FxNativeWindowFactory({},new ScopeContent()).create();await native.prepareGeometry();
+ return {b,native,events,commit(rect=pending,reason=3){current={...rect};events.at(-1)({reason,rect:{...rect}});}};
+}
+test('prepared move waits matching actual rectangle event; stale resize and late old getters cannot commit',async()=>{
+ const f=await waitingNativeRect();let settled=false;const moving=f.native.movePx({x:40,y:50}).then(rect=>{settled=true;return rect;});
+ for(let i=0;i<5;i++)await Promise.resolve();assert.equal(settled,false);assert.equal(f.events.length,1);
+ f.commit({left:0,top:0,width:100,height:100},0);await Promise.resolve();assert.equal(settled,false);
+ f.commit();assert.deepEqual(await moving,{x:40,y:50,width:100,height:100});assert.equal(f.b.window.callbacks.size,0);await f.native.destroy();
+});
+test('destroy cancels rectangle wait and removes exact listener; late event stays inert',async()=>{
+ const f=await waitingNativeRect();const moving=f.native.movePx({x:40,y:50});const rejected=assert.rejects(moving,{code:'DESTROYED'});rejected.catch(()=>{});
+ for(let i=0;i<5;i++)await Promise.resolve();await f.native.destroy();await rejected;assert.equal(f.b.window.callbacks.size,0);f.commit();assert.equal(f.b.window.operations.filter(x=>x==='destroy').length,1);
+});
+test('rectangle deadline clears timer/listener and late actual event cannot revive wait',async()=>{
+ const f=await waitingNativeRect();const set=globalThis.setTimeout,clear=globalThis.clearTimeout;let deadline;let cleared=0;
+ globalThis.setTimeout=(callback,ms)=>{assert.equal(ms,1000);deadline=callback;return 1234;};globalThis.clearTimeout=handle=>{assert.equal(handle,1234);cleared++;};
+ try {const moving=f.native.movePx({x:40,y:50});const rejected=assert.rejects(moving,{code:'CAPABILITY_UNSUPPORTED'});rejected.catch(()=>{});for(let i=0;i<5;i++)await Promise.resolve();deadline();await rejected;assert.equal(cleared,1);assert.equal(f.b.window.callbacks.size,0);f.commit();assert.equal(cleared,1);}
+ finally {globalThis.setTimeout=set;globalThis.clearTimeout=clear;await f.native.destroy();}
+});
+test('confirmed no-op does not wait and platform clamping returns actual event coordinates',async()=>{
+ const f=await waitingNativeRect();assert.deepEqual(await f.native.movePx({x:0,y:0}),{x:0,y:0,width:100,height:100});assert.equal(f.events.length,0);
+ const moving=f.native.movePx({x:40,y:50});for(let i=0;i<5;i++)await Promise.resolve();f.commit({left:35,top:45,width:100,height:100});assert.deepEqual(await moving,{x:35,y:45,width:100,height:100});await f.native.destroy();
+});
+test('missing rectangle event capability rejects before submitting prepared movement',async()=>{
+ const f=await waitingNativeRect();f.b.window.on=()=>{throw Object.assign(Error('unsupported'),{code:801});};await assert.rejects(f.native.movePx({x:40,y:50}),{code:'CAPABILITY_UNSUPPORTED',platformCode:801});assert.equal(f.b.window.operations.includes('move'),false);await f.native.destroy();
+});
+
+test('controller cancel during hidden preparation never shows business content and destroys the late native surface once',async()=>{
+ const b=deferredWindowRect();const gate=deferred();let entered=false;const show=b.window.showWindow;
+ b.window.showWindow=async()=>{entered=true;await gate.promise;await show();};
+ const source=new ScopeContent();const p=new FxSystemPlatform(new b.api.FxNativeWindowFactory({},source),systemGeometry());
+ const {FxController}=require('../work/core/core/FxController.js');const controller=new FxController(p,new FxConfig(),undefined,{error(){}});p.bindController(controller);
+ const showing=controller.show();const rejected=assert.rejects(showing,{code:'DESTROYED'});rejected.catch(()=>{});
+ for(let i=0;i<30 && !entered;i++)await Promise.resolve();assert.equal(entered,true);assert.equal(b.view.getSnapshot().visible,false);
+ const cancel=controller.cancel();gate.resolve();await rejected;await cancel;
+ assert.equal(b.window.operations.filter(x=>x==='show').length,1);assert.equal(b.window.operations.filter(x=>x==='destroy').length,1);assert.equal(source.disposals,1);assert.equal(controller.isShow(),false);
+});
+test('genuine permission error from preparation is cleaned before explicitly requested app fallback',async()=>{
+ const b=deferredWindowRect();const source=new ScopeContent();b.window.failures.set('show',Object.assign(Error('permission denied'),{code:201}));let fallbackCount=0;
+ const app=new FakePlatform();app.actualScope='app';
+ const p=new FxSystemPlatform(new b.api.FxNativeWindowFactory({},source),systemGeometry(),()=>{assert.ok(b.window.operations.includes('destroy'));fallbackCount++;return app;});
+ await p.create();assert.equal(p.actualScope,'app');assert.equal(fallbackCount,1);assert.equal(source.disposals,1);await p.destroy();
+});
+
+test('initial deferred event is consumed by preparation; formal show cannot replace confirmed movement with a stale getter',async()=>{
+ const b=deferredWindowRect();const raw=b.window.getWindowProperties;let stale=true;
+ b.window.getWindowProperties=()=>{const properties=raw();return {...properties,windowRect:stale?{left:0,top:0,width:0,height:0}:properties.windowRect};};
+ const native=await new b.api.FxNativeWindowFactory({},new ScopeContent()).create();await native.resize({width:100,height:100});await native.movePx({x:0,y:0});
+ await native.prepareGeometry();assert.deepEqual(native.getRect(),{x:0,y:0,width:100,height:100});
+ assert.deepEqual(await native.movePx({x:70,y:350}),{x:70,y:350,width:100,height:100});
+ await native.show();assert.deepEqual(native.getRect(),{x:70,y:350,width:100,height:100});await native.destroy();
 });

@@ -74,7 +74,7 @@ export struct ScopeDemo {
         Button('清位置').onClick(() => this.run(this.control.clearPosition()))
         Button('读状态').onClick(() => {this.message=this.control.getState()+' '+this.control.getX()+','+this.control.getY()+' shown='+this.control.isShow();})
       }
-      if(this.mounted) { ForEach([this.instance],(_instance: number) => {FloatingXHost({control:this.control,host:this.hostContent}).layoutWeight(1)},(instance: number) => instance.toString()) }
+      if(this.mounted) { ForEach([this.instance],(_instance: number) => {FloatingXHost({control:this.control,host:() => {this.hostContent();}}).layoutWeight(1)},(instance: number) => instance.toString()) }
       else { Text('宿主已卸载，show 意图保留；cancel 才终止').layoutWeight(1) }
     }.width('100%').height('100%')
   }

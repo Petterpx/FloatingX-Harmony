@@ -26,6 +26,8 @@ export interface FxSystemOwner {
 }
 export interface FxNativeWindow {
   readonly requiresView?: boolean;
+  /** Make initially deferred native readback valid while content and input stay hidden. */
+  prepareGeometry?(): Promise<void>;
   load(owner: FxSystemOwner): Promise<void>;
   show(): Promise<void>; hide(): Promise<void>; destroy(): Promise<void>;
   resize(size: FxSize): Promise<void>;

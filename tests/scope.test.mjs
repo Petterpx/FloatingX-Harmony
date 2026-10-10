@@ -140,3 +140,12 @@ test('native hide completion failure rolls back visible snapshot after fade',asy
  const s=await setup();await assert.rejects(s.platform.hide(()=>{throw Error('native hide');}));
  assert.equal(s.platform.getSnapshot().visible,true);assert.equal(s.platform.getSnapshot().opacity,1);await s.controller.cancel();
 });
+
+test('clipped view area cannot replace measured full content and late size observer cannot revive a disposed mount',async()=>{
+ const p=new FxScopePlatform();const source=new ScopeContent();let full={width:50,height:50};let listener;
+ source.create=()=>({content:{},measure:()=>full,observeSize:fn=>{listener=fn;},dispose(){}});
+ const context=new ScopeContext();p.mountHost(context,source);p.layoutHost({width:300,height:300});await p.create();
+ p.layoutContent({width:25,height:50});assert.deepEqual(p.getSnapshot().size,{width:50,height:50});
+ full={width:80,height:60};listener(full);assert.deepEqual(p.getSnapshot().size,full);
+ await p.destroy();listener({width:99,height:99});assert.deepEqual(p.getSnapshot().size,{width:80,height:60});assert.equal(p.getSnapshot().content,undefined);
+});
