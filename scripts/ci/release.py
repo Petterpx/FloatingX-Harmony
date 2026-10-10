@@ -222,26 +222,28 @@ def build(args):
     print(f'Built {tag} at {commit}: {assets}')
 
 
-def provenance_label(tag, commit):
-    return f'FloatingX tag={tag} sourceCommit={commit}'
+def provenance_label(tag, commit, name):
+    return f'{name} | FloatingX:{tag}:{commit}'
 
 
 def check_recovery_labels(existing, tag, commit):
-    owned = [asset for name, asset in existing.items() if name in asset_names(tag)]
-    label = provenance_label(tag, commit)
-    if any(asset.get('label') != label for asset in owned):
+    owned = [(name, asset) for name, asset in existing.items() if name in asset_names(tag)]
+    legacy = f'FloatingX tag={tag} sourceCommit={commit}'
+    if any(asset.get('label') not in {provenance_label(tag, commit, name), legacy}
+           for name, asset in owned):
         raise ValueError('Existing assets lack matching recovery provenance; refusing replacement')
 
 
 def replace_assets(request, base, upload_url, existing, assets, tag, commit):
-    label = provenance_label(tag, commit)
     # Preserve source provenance on existing assets before any destructive replacement.
     # If manifest POST fails after DELETE, these labels allow only same-commit recovery.
     for name in asset_names(tag):
+        label = provenance_label(tag, commit, name)
         if name in existing and existing[name].get('label') != label:
             request(base + f'/releases/assets/{existing[name]["id"]}', method='PATCH',
                     data=json.dumps({'label': label}).encode())
     for name in ['manifest.json'] + binary_names(tag) + ['SHA256SUMS']:
+        label = provenance_label(tag, commit, name)
         if name in existing:
             request(base + f'/releases/assets/{existing[name]["id"]}', method='DELETE')
         query = urllib.parse.urlencode({'name': name, 'label': label})

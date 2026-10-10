@@ -201,8 +201,28 @@ class ReleaseTests(unittest.TestCase):
                 r.publish(args)
             self.assertEqual(set(assets), set(r.asset_names(args.tag)))
             self.assertTrue(all(asset['state'] == 'uploaded' for asset in assets.values()))
+            self.assertEqual(len({asset['label'] for asset in assets.values()}), 4)
             for name, asset in assets.items():
                 self.assertEqual(asset['data'], (args.assets / name).read_bytes())
+                self.assertEqual(asset['label'], f'{name} | FloatingX:{args.tag}:{args.commit}')
+
+    def test_legacy_starter_labels_migrate_only_with_matching_tag_and_commit(self):
+        r = self.implementation()
+        with tempfile.TemporaryDirectory() as tmp:
+            args, assets, state, urlopen = self.github_upload_fixture(r, Path(tmp))
+            with patch.dict(r.os.environ, {'GH_TOKEN': 'test-token'}), patch.object(r.urllib.request, 'urlopen', urlopen):
+                with self.assertRaises(r.urllib.error.HTTPError):
+                    r.publish(args)
+                for asset in assets.values():
+                    asset['label'] = f'FloatingX tag={args.tag} sourceCommit={args.commit}'
+                with self.assertRaises(ValueError):
+                    r.check_recovery_labels(assets, args.tag, 'b' * 40)
+                with self.assertRaises(ValueError):
+                    r.check_recovery_labels(assets, 'v1.2.4', args.commit)
+                r.publish(args)
+            self.assertEqual(len({asset['label'] for asset in assets.values()}), 4)
+            for name, asset in assets.items():
+                self.assertEqual(asset['label'], f'{name} | FloatingX:{args.tag}:{args.commit}')
 
     def test_starter_recovery_rejects_missing_labels_and_different_commit(self):
         r = self.implementation()
@@ -230,8 +250,8 @@ class ReleaseTests(unittest.TestCase):
         r = self.implementation()
         with tempfile.TemporaryDirectory() as tmp:
             args, assets, state, urlopen = self.github_upload_fixture(r, Path(tmp))
-            for asset in assets.values():
-                asset['label'] = r.provenance_label(args.tag, args.commit)
+            for name, asset in assets.items():
+                asset['label'] = r.provenance_label(args.tag, args.commit, name)
             assets['manifest.json']['data'] = b'not JSON'
             with patch.dict(r.os.environ, {'GH_TOKEN': 'test-token'}), patch.object(r.urllib.request, 'urlopen', urlopen):
                 with self.assertRaises(json.JSONDecodeError):
