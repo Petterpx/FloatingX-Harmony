@@ -46,8 +46,8 @@ test('display density and viewport change refresh shared drag release bounds',as
  const b=nativeBoundary();const p=new FxSystemPlatform(new b.api.FxNativeWindowFactory({},new ScopeContent()),systemGeometry());await p.create();await p.applyConfig(new FxConfig({adsorb:false,position:{x:10,y:10}}));
  b.display.width=1500;b.display.densityPixels=3;b.displayListener(42);for(let i=0;i<20;i++)await Promise.resolve();assert.equal(p.getGeometry().viewport.size.width,500);
  const event=(type,x)=>({type,timestamp:1000000,changedTouches:[{id:1,displayX:x,displayY:100,windowX:0,windowY:0}]});
- b.view.handleTouch(event(TouchType.Down,100));b.view.handleTouch(event(TouchType.Move,490));for(let i=0;i<20;i++)await Promise.resolve();assert.equal(p.getPosition().x,400);
- b.view.handleTouch(event(TouchType.Up,490));for(let i=0;i<30;i++)await Promise.resolve();assert.equal(p.getPosition().x,400);assert.equal(b.window.properties.windowRect.left,1200);await p.destroy();
+ b.view.handleTouch(event(TouchType.Down,100));b.view.handleTouch(event(TouchType.Move,490));for(let i=0;i<20;i++)await Promise.resolve();assert.equal(p.getPosition().x,408);
+ b.view.handleTouch(event(TouchType.Up,490));for(let i=0;i<30;i++)await Promise.resolve();assert.equal(p.getPosition().x,408);assert.equal(b.window.properties.windowRect.left,1224);await p.destroy();
 });
 test('post-allocation adapter failure destroys native window before allowing fallback',async()=>{
  for(const code of [16000050,801]){
@@ -67,7 +67,7 @@ test('changed viewport insets feed shared nearest-edge settlement before native 
  const view=new b.api.FxSystemPageView(p,new ScopeContext(),new ScopeContent(),{});await view.create();await p.applyConfig(new FxConfig({position:{x:30,y:20},adsorb:true,edgeAdsorb:FxEdgeAdsorb.LEFT_RIGHT}));
  f.native.viewport.size={width:500,height:500};f.native.viewport.insets={left:30,top:5,right:40,bottom:20};await p.move({x:30,y:20},false);
  const event=(type,x)=>({type,timestamp:1000000,changedTouches:[{id:1,displayX:x,displayY:100,windowX:0,windowY:0}]});
- view.handleTouch(event(TouchType.Down,100));view.handleTouch(event(TouchType.Move,292));for(let i=0;i<20;i++)await Promise.resolve();assert.equal(p.getPosition().x,222);
+ view.handleTouch(event(TouchType.Down,100));view.handleTouch(event(TouchType.Move,292));for(let i=0;i<20;i++)await Promise.resolve();assert.equal(p.getPosition().x,268);
  view.handleTouch(event(TouchType.Up,292));for(let i=0;i<30;i++)await Promise.resolve();assert.equal(p.getPosition().x,410);await p.destroy();
 });
 test('superseded native move restores its last rectangle if the queued configuration fails',async()=>{
@@ -223,4 +223,17 @@ test('rollback deadline after ordinary move failure terminates public control an
  try {const moving=controller.move(40,50);const rejection=assert.rejects(moving,{code:'DESTROYED'});rejection.catch(()=>{});for(let i=0;i<50&&calls<2;i++)await Promise.resolve();assert.equal(calls,2,'ordinary failure must reach actual rollback call');deadline();for(let i=0;i<70;i++)await Promise.resolve();assert.equal(controller.getState(),'destroyed');assert.equal(controller.isShow(),false);assert.equal(p.isReadyToShow(),false);await rejection;
   await assert.rejects(controller.show(),{code:'DESTROYED'});await assert.rejects(controller.move(60,70),{code:'DESTROYED'});await assert.rejects(controller.updateConfig(new FxConfig()),{code:'DESTROYED'});await controller.cancel();assert.equal(b.window.callbacks.size,0);assert.equal(b.window.operations.filter(x=>x==='destroy').length,1);late.resolve();for(let i=0;i<10;i++)await Promise.resolve();assert.equal(b.window.operations.filter(x=>x==='destroy').length,1);
  }finally {globalThis.setTimeout=set;globalThis.clearTimeout=clear;late.resolve();await controller.cancel();}
+});
+
+for(const [edge,start,expected] of [['right',{x:250,y:225},{x:450,y:125}],['left',{x:0,y:225},{x:0,y:125}],['top',{x:125,y:0},{x:225,y:0}],['bottom',{x:125,y:450},{x:225,y:250}]])test('live system display resize preserves '+edge+' edge and half hide',async()=>{
+ const f=new FakeWindowFactory();let changed;f.native.subscribe=listener=>{changed=listener;return ()=>{};};
+ const p=new FxSystemPlatform(f,systemGeometry());await p.create();await p.applyConfig(new FxConfig({edgeAdsorb:edge,halfHide:true}));await p.move(start,false);
+ f.native.viewport.size={width:500,height:300};changed();await p.tail;
+ assert.deepEqual(p.getPosition(),expected);const slice=p.getProjection().visibleSize;assert.equal(edge==='left'||edge==='right'?slice.width:slice.height,25);
+ f.native.viewport.size={width:300,height:500};changed();await p.tail;assert.deepEqual(p.getPosition(),start);await p.destroy();
+});
+test('live system insets remap old complete range instead of reconstructing history with new insets',async()=>{
+ const f=new FakeWindowFactory();let changed;f.native.subscribe=listener=>{changed=listener;return ()=>{};};const p=new FxSystemPlatform(f,systemGeometry());
+ await p.create();await p.applyConfig(new FxConfig({edgeAdsorb:'right',halfHide:true}));await p.move({x:250,y:225},false);
+ f.native.viewport.insets={left:20,top:30,right:40,bottom:70};changed();await p.tail;assert.deepEqual(p.getPosition(),{x:210,y:205});assert.equal(p.getProjection().visibleSize.width,25);await p.destroy();
 });

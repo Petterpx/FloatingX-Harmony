@@ -86,13 +86,6 @@ test('final primary up coordinate is included in drag settlement',async()=>{
  assert.deepEqual(s.platform.getPosition(),{x:70,y:90}); await s.controller.cancel();
 });
 
-test('async interaction callback rejection is captured once in controller error channel',async()=>{
- const p=new FxScopePlatform({onClick:async()=>{throw new Error('click failure');}}); const errors=[];
- const c=new FxController(p,new FxConfig(),e=>{if(e.error) errors.push(e.error);},{error(){}}); p.bindController(c);
- p.mountHost(new ScopeContext(),new ScopeContent()); p.layoutHost({width:300,height:500}); await c.show();
- p.handleTouch(touch(0,1,0,0,0)); p.handleTouch(touch(1,1,0,0,20)); for(let i=0;i<4;i++) await Promise.resolve();
- assert.equal(errors.length,1); assert.equal(errors[0].message,'click failure'); await c.cancel();
-});
 
 test('native content dispose failure still releases platform-owned host and snapshot references',async()=>{
  const p=new FxScopePlatform(); const c=new FxController(p,new FxConfig(),undefined,{error(){}}); p.bindController(c);
@@ -148,4 +141,34 @@ test('clipped view area cannot replace measured full content and late size obser
  p.layoutContent({width:25,height:50});assert.deepEqual(p.getSnapshot().size,{width:50,height:50});
  full={width:80,height:60};listener(full);assert.deepEqual(p.getSnapshot().size,full);
  await p.destroy();listener({width:99,height:99});assert.deepEqual(p.getSnapshot().size,{width:80,height:60});assert.equal(p.getSnapshot().content,undefined);
+});
+
+for(const [edge,start,expected] of [
+ ['right',{x:250,y:225},{x:450,y:125}],['left',{x:0,y:225},{x:0,y:125}],
+ ['top',{x:125,y:0},{x:225,y:0}],['bottom',{x:125,y:450},{x:225,y:250}]
+]) test('live scope resize preserves '+edge+' edge, other axis ratio and half hide',async()=>{
+ const s=await setup({adsorb:true,edgeAdsorb:edge,halfHide:true,position:start});
+ s.platform.layoutHost({width:500,height:300});assert.deepEqual(s.platform.getPosition(),expected);
+ const slice=s.platform.getSnapshot().projection.visibleSize;assert.equal(edge==='left'||edge==='right'?slice.width:slice.height,25);
+ s.platform.layoutHost({width:300,height:500});assert.deepEqual(s.platform.getPosition(),start);await s.controller.cancel();
+});
+test('live scope safe area change remaps using complete historical bounds',async()=>{
+ const s=await setup({adsorb:true,edgeAdsorb:'right',halfHide:true,position:{x:250,y:225}});
+ s.platform.layoutHost({width:300,height:500},{left:20,top:30,right:40,bottom:70});
+ assert.deepEqual(s.platform.getPosition(),{x:210,y:205});assert.equal(s.platform.getSnapshot().projection.visibleSize.width,25);
+ s.platform.layoutHost({width:300,height:500});assert.deepEqual(s.platform.getPosition(),{x:250,y:225});await s.controller.cancel();
+});
+for(const kind of ['click','longPress','drag'])for(const asyncFailure of [false,true])test(kind+' '+(asyncFailure?'async':'sync')+' callback failure is sanitized and cleanup continues',async()=>{
+ const secret='business payload sentinel';const logs=[];const events=[];
+ const fail=()=>{if(asyncFailure)return Promise.reject(Error(secret));throw Error(secret);};
+ const p=new FxScopePlatform({['on'+kind[0].toUpperCase()+kind.slice(1)]:fail});
+ const c=new FxController(p,new FxConfig({adsorb:false}),e=>events.push(e),{error:e=>logs.push(e)});p.bindController(c);
+ p.mountHost(new ScopeContext(),new ScopeContent());p.layoutHost({width:300,height:500});await c.show();
+ p.handleTouch(touch(0,1,0,0,0));
+ if(kind==='longPress')p.handleTouch(touch(2,1,0,0,501));
+ if(kind==='drag')p.handleTouch(touch(2,1,30,30,20));
+ p.handleTouch(touch(1,1,kind==='drag'?30:0,kind==='drag'?30:0,kind==='longPress'?520:40));
+ await new Promise(r=>setImmediate(r));await c.cancel();
+ assert.equal(logs.length,1);assert.equal(logs[0].code,'EVENT_CALLBACK_FAILED');assert.equal(JSON.stringify(logs).includes(secret),false);
+ assert.deepEqual(events.filter(e=>e.error),[]);assert.equal(c.getState(),'destroyed');assert.equal(p.getSnapshot().content,undefined);
 });

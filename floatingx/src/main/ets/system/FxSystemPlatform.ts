@@ -3,7 +3,7 @@ import { FxController } from '../core/FxController';
 import { FxConfig } from '../core/FxConfig';
 import { FxError } from '../core/FxError';
 import { FxPoint, FxSize, FxProjection, FxDisplayMode, FxAnimationCurve } from '../core/FxTypes';
-import { FxGeometryInput, initial, clamp, bounds, project } from '../geometry/FxGeometry';
+import { FxGeometryInput, initial, clamp, bounds, project, logicalEdge, remap } from '../geometry/FxGeometry';
 import { FxAnimation } from '../component/FxAnimation';
 import { FxNativeWindow, FxWindowFactory, FxSystemView } from './FxNativeWindow';
 export interface FxFrameClock { now(): number; wait(): Promise<void>; cancel(): void; }
@@ -20,6 +20,7 @@ export class FxSystemPlatform implements FxPlatform {
   actualScope: FxScope = FxScope.SYSTEM;
   private factory: FxWindowFactory; private input: FxGeometryInput;
   private fallbackFactory?: FxFallbackFactory; private fallback?: FxFallbackPlatform;
+  private fallbackCreated: boolean = false; private fallbackCause?: FxError;
   private onEvent?: FxEventCallback; private native?: FxNativeWindow; private view?: FxSystemView;
   private controller?: FxController; private releaseNative?: () => void; private releaseFallback?: () => void;
   private listeners: ((type: FxEventType) => void)[] = [];
@@ -41,7 +42,8 @@ export class FxSystemPlatform implements FxPlatform {
   getGeometry(): FxGeometryInput {return this.fallback!==undefined && this.fallback.getGeometry!==undefined?this.fallback.getGeometry():this.input;}
   getProjection(): FxProjection {return this.projection;}
   async create(): Promise<void> {
-    this.assertAlive();if(this.native!==undefined || this.fallback!==undefined)return;
+    this.assertAlive();if(this.native!==undefined || this.fallbackCreated)return;
+    if(this.fallback!==undefined){await this.createFallback();return;}
     try {
       await this.factory.checkAccess();this.assertAlive();this.native=await this.factory.create();this.assertAlive();
       this.releaseNative=this.native.subscribe(() => {this.cancelAnimations();this.observe(this.move(this.position,false));});
@@ -51,15 +53,22 @@ export class FxSystemPlatform implements FxPlatform {
     } catch(error) {
       const cause=error as Error;await this.cleanupNative();
       if(!this.destroyed && this.fallbackFactory!==undefined && cause instanceof FxError && (cause.code==='PERMISSION_DENIED'||cause.code==='CAPABILITY_UNSUPPORTED')) {
-        this.fallback=this.fallbackFactory();this.actualScope=FxScope.APP;
+        this.fallback=this.fallbackFactory();this.fallbackCause=cause as FxError;
         if(this.controller!==undefined && this.fallback.bindController!==undefined)this.fallback.bindController(this.controller);
         if(this.fallback.subscribeLifecycle!==undefined)this.releaseFallback=this.fallback.subscribeLifecycle((type: FxEventType) => this.lifecycle(type));
-        await this.fallback.create();
-        const event: FxEvent={type:FxEventType.ERROR,position:this.getPosition(),actualScope:FxScope.APP,error:cause as FxError};
-        if(this.onEvent!==undefined)this.onEvent(event);else if(this.controller!==undefined)this.controller.reportError(cause as Error);
+        await this.createFallback();
         return;
       }
       throw cause as Error;
+    }
+  }
+  private async createFallback(): Promise<void> {
+    const fallback=this.fallback;if(fallback===undefined || this.fallbackCreated)return;
+    await fallback.create();this.assertAlive();this.fallbackCreated=true;this.actualScope=FxScope.APP;
+    const cause=this.fallbackCause;this.fallbackCause=undefined;
+    if(cause!==undefined) {
+      const event: FxEvent={type:FxEventType.ERROR,position:this.getPosition(),actualScope:FxScope.APP,error:cause};
+      if(this.onEvent!==undefined)this.onEvent(event);else if(this.controller!==undefined)this.controller.reportError(cause as Error);
     }
   }
   async applyConfig(config: FxConfig): Promise<void> {
@@ -117,7 +126,10 @@ export class FxSystemPlatform implements FxPlatform {
   }
   private async projectNative(point: FxPoint, token?: number): Promise<void> {
     const native=this.requireNative();const viewport=native.getViewport();if(!Number.isFinite(viewport.density)||viewport.density<=0)throw new FxError('INVALID_GEOMETRY','Invalid target display density');
-    this.input.viewport={size:viewport.size,insets:viewport.insets};const logical=clamp(point,bounds(this.input));const projection=project(logical,this.input);const d=viewport.density;
+    const oldViewport=this.input.viewport;const oldLimits=bounds(this.input);const edge=logicalEdge(point,this.input);
+    this.input.viewport={size:{width:viewport.size.width,height:viewport.size.height},insets:{left:viewport.insets.left,top:viewport.insets.top,right:viewport.insets.right,bottom:viewport.insets.bottom}};
+    const logical=this.positioned ? remap(point,oldLimits,edge,bounds(this.input)) : clamp(point,bounds(this.input));
+    const projection=project(logical,this.input);const d=viewport.density;
     const size: FxSize={width:Math.round(projection.visibleSize.width*d),height:Math.round(projection.visibleSize.height*d)};
     const previous=native.getRect();
     try {
@@ -127,13 +139,14 @@ export class FxSystemPlatform implements FxPlatform {
         await native.prepareGeometry();actual=native.getRect();
       }
       if(this.destroyed || token!==undefined && !this.animation.isCurrent(token)) {
-        if(previous.width>0 && previous.height>0) {await native.resize({width:previous.width,height:previous.height});await native.movePx({x:previous.x,y:previous.y});}return;
+        if(previous.width>0 && previous.height>0) {await native.resize({width:previous.width,height:previous.height});await native.movePx({x:previous.x,y:previous.y});}this.input.viewport=oldViewport;return;
       }
       if(actual.width!==size.width||actual.height!==size.height)throw new FxError('CAPABILITY_UNSUPPORTED','Native window cannot represent requested visible slice');
       this.position={x:logical.x+(actual.x/d-projection.position.x),y:logical.y+(actual.y/d-projection.position.y)};
       this.positioned=true;this.projection={position:{x:actual.x/d,y:actual.y/d},visibleSize:projection.visibleSize,contentOffset:projection.contentOffset};
       if(this.view!==undefined)this.view.adoptPosition(this.position);
     } catch(error) {
+      this.input.viewport=oldViewport;
       if(this.cancelIfTerminated(native))throw error as Error;
       // Restore the actual native rectangle; keep the last successful logical projection.
       try {if(previous.width>0 && previous.height>0) {await native.resize({width:previous.width,height:previous.height});await native.movePx({x:previous.x,y:previous.y});}}catch(rollback){this.cancelIfTerminated(native);throw rollback as Error;}

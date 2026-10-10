@@ -106,3 +106,9 @@ test('reentrant dispose returns established promise and cleanup is attempted exa
  const disposal=s.host.dispose();assert.equal(reentered,disposal);await disposal;
  assert.equal(s.host.dispose(),disposal);assert.equal(calls,1);assert.equal(s.c.getState(),'destroyed');assert.equal(s.source.disposals,1);assert.equal(s.win.overlay.disposals,1);assert.equal(s.win.offCalls.length,3);
 });
+
+test('real app adapter retains right edge and relative y through live overlay resize',async()=>{
+ const s=await setup();await s.c.updateConfig(new FxConfig({edgeAdsorb:'right',halfHide:true}));await s.c.move(250,225);
+ s.p.layoutHost({width:500,height:300});assert.deepEqual(s.p.getPosition(),{x:450,y:125});assert.equal(s.p.getSnapshot().projection.visibleSize.width,25);
+ s.p.layoutHost({width:300,height:500});assert.deepEqual(s.p.getPosition(),{x:250,y:225});await s.host.dispose();
+});

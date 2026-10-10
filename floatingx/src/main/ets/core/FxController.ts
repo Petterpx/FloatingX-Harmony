@@ -418,12 +418,12 @@ export class FxController {
       if (this.onEvent !== undefined) {
         try {
           const completion = this.onEvent(event);
-          if (completion instanceof Promise) completion.catch(() => this.callbackFailure());
-        } catch (_) { this.callbackFailure(); }
+          if (completion instanceof Promise) completion.catch(() => this.reportCallbackFailure());
+        } catch (_) { this.reportCallbackFailure(); }
       }
     }
   }
-  private callbackFailure(): void { this.log(new FxError('EVENT_CALLBACK_FAILED', 'Event callback failed')); }
+  reportCallbackFailure(): void { this.log(new FxError('EVENT_CALLBACK_FAILED', 'Event callback failed')); }
   private log(error: FxError): void {
     try { this.logger.error(error); } catch (_) { /* User logging cannot affect lifecycle cleanup. */ }
   }

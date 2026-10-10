@@ -40,3 +40,5 @@ BuilderParam 应通过闭包传入父页面的 Builder，例如 `host:() => {thi
 系统原生窗口首次属性矩形可能尚未就绪。库在内容隐藏且禁止触摸/焦点时提交初始矩形，正式 show 才恢复交互；API12 windowRectChange 确认实际位置，Promise/位置 getter 采用确认值。缺少事件能力或一秒内未确认会报错，不将旧矩形当作移动完成。system hide 保留窗口，cancel 才销毁。
 
 百分比根内容的包含块基准固定为 FxContent 声明的初始 size；节点实际测量不会反向改变该基准，半隐藏也不改变它。同节点数值尺寸更新仍读取真实完整尺寸。系统操作的总期限同时等待原生 API 与矩形确认；无法确认时终止该窗口并取消控制器，后续 show/move/config 拒绝，destroy 仍等待真实平台销毁结果，不把启动清理当作释放完成。
+
+运行期宿主/显示屏尺寸及insets改变时，位置按变更前完整合法范围保留贴边方向和另一轴比例。FxContent仅提供typed Builder/参数更新面；原生mount只由内部adapter创建并由control取消释放。interaction callback同步抛异常或Promise拒绝时，日志只记录消毒的EVENT_CALLBACK_FAILED，不复制业务异常内容，也不分类为原生窗口错误。显式app fallback首次分配失败后可再次show重试。

@@ -10,7 +10,7 @@ loadScopePlatform();const {FxWindowHost}=loadAppPlatforms();loadSystemAdapter(na
 const Module=require('node:module');const original=Module._load;
 Module._load=function(name,...args){if(name==='@ohos.arkui.node')return {FrameNode:class{constructor(){this.commonEvent={setOnSizeChange(){}};}getMeasuredSize(){return {width:0,height:0};}addComponentContent(node){this.node=node;}dispose(){}},NodeContent:class{addFrameNode(frame){this.frame=frame;}removeFrameNode(){this.frame=undefined;}},ComponentContent:class{constructor(context,builder,params){this.params=params;this.updates=[];nodes.push(this);}update(params){this.params=params;this.updates.push(params);}dispose(){this.disposed=true;}}};return original.call(this,name,...args);};
 for(const file of ['component/FxContent','scope/FxHostBinding','FloatingX']){const destination=path.resolve('work/core',file+'.js');fs.mkdirSync(path.dirname(destination),{recursive:true});fs.writeFileSync(destination,ts.transpileModule(fs.readFileSync('floatingx/src/main/ets/'+file+'.ets','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText);}
-const {FloatingX}=require('../work/core/FloatingX.js');const {FxContent}=require('../work/core/component/FxContent.js');const {FxConfig}=require('../work/core/core/FxConfig.js');const {FxController}=require('../work/core/core/FxController.js');const {FakePlatform,deferred}=await import('./support/FxFakes.mjs');
+const {FloatingX}=require('../work/core/FloatingX.js');const {FxContent,contentSource}=require('../work/core/component/FxContent.js');const {FxConfig}=require('../work/core/core/FxConfig.js');const {FxController}=require('../work/core/core/FxController.js');const {FakePlatform,deferred}=await import('./support/FxFakes.mjs');
 Module._load=original;
 const content=()=>new FxContent({builder:()=>{}}, {label:'first'}, {width:50,height:50});
 const host=async()=>FxWindowHost.create({getMainWindow:async()=>new AppWindow()});
@@ -35,14 +35,14 @@ test('shared app/system tags, typed handles, defensive tag copy and cancel regis
 });
 test('actual facade and content adapter suppress late content commit when cancel wins',async()=>{
  const source=content();const control=FloatingX.createScope({content:source,config:new FxConfig()});
- const platform=require('../work/core/scope/FxHostBinding.js').scopeHostBinding(control).platform;platform.mountHost(new ScopeContext(),source);platform.layoutHost({width:300,height:300});await control.show();
+ const platform=require('../work/core/scope/FxHostBinding.js').scopeHostBinding(control).platform;platform.mountHost(new ScopeContext(),contentSource(source));platform.layoutHost({width:300,height:300});await control.show();
  const node=nodes.at(-1);const updating=control.updateContent({label:'late'});await control.cancel();
  await assert.rejects(updating,{code:'DESTROYED'});assert.deepEqual(node.updates,[]);assert.equal(node.disposed,true);
  for(const action of [()=>control.show(),()=>control.hide(),()=>control.move(1,2),()=>control.moveByVector(1,2),()=>control.updateConfig(new FxConfig()),()=>control.updateContent({label:'dead'}),()=>control.clearPosition()])await assert.rejects(action(),{code:'DESTROYED'});
 });
 test('scope show before mount is stable hidden and retained intent resumes after layout',async()=>{
  const source=content();const control=FloatingX.createScope({content:source,config:new FxConfig()});await control.show();assert.equal(control.isShow(),false);assert.equal(control.getState(),'idle');
- const platform=require('../work/core/scope/FxHostBinding.js').scopeHostBinding(control).platform;platform.mountHost(new ScopeContext(),source);platform.layoutHost({width:300,height:300});await control.show();assert.equal(control.isShow(),true);await control.cancel();
+ const platform=require('../work/core/scope/FxHostBinding.js').scopeHostBinding(control).platform;platform.mountHost(new ScopeContext(),contentSource(source));platform.layoutHost({width:300,height:300});await control.show();assert.equal(control.isShow(),true);await control.cancel();
 });
 test('async event callback rejection is sanitized, does not undo success or recursively emit ERROR',async()=>{
  const platform=new FakePlatform();const logged=[];const events=[];let controller;
@@ -53,7 +53,7 @@ test('async event callback rejection is sanitized, does not undo success or recu
 test('content update retains original native mount and leaves installation untouched',async()=>{
  const source=content();const control=FloatingX.createScope({content:source,config:new FxConfig()});
  const platform=require('../work/core/scope/FxHostBinding.js').scopeHostBinding(control).platform;
- platform.mountHost(new ScopeContext(),source);platform.layoutHost({width:300,height:300});await control.show();
+ platform.mountHost(new ScopeContext(),contentSource(source));platform.layoutHost({width:300,height:300});await control.show();
  const node=nodes.at(-1);await control.updateContent({label:'updated'});assert.equal(nodes.at(-1),node);assert.equal(node.params.label,'updated');assert.equal(node.disposed,undefined);await control.cancel();
 });
 test('reentrant async callback returning canceled hide rejection is caught once without error loop',async()=>{
@@ -86,4 +86,21 @@ test('system fallback uses installed system tag storage key and exposes actual a
  assert.equal(events.find(e=>e.error)?.actualScope,'app');assert.equal(events.find(e=>e.type==='show').actualScope,'app');
  assert.deepEqual([...new Set(keys.map(k=>k[1]))],['fx1:4:test6:system13:stored-system']);
  await item.cancel();await h.dispose();FloatingX.setLogger(undefined);
+});
+
+test('public content does not offer consumer native allocation methods',()=>{
+ const source=content();assert.equal(source.create,undefined);assert.equal(source.mount,undefined);
+});
+test('real app fallback first allocation failure retries show without duplicate ownership or success notification',async()=>{
+ const window=new AppWindow();const h=await FxWindowHost.create({getMainWindow:async()=>window});const events=[];let attempts=0;
+ const add=window.overlay.addComponentContent.bind(window.overlay);window.overlay.addComponentContent=node=>{attempts++;if(attempts===1)throw Error('transient allocation');add(node);};
+ FloatingX.setLogger({error(){}});const item=FloatingX.installSystem({tag:'retry-system',context:{},content:content(),size:{width:50,height:50},config:new FxConfig(),fallback:{host:h},events:e=>events.push(e)});
+ await assert.rejects(item.show(),{code:'WINDOW_OPERATION_FAILED'});
+ // The already queued host-eligibility notification may itself retry before explicit show.
+ assert.ok(window.overlay.nodes.size<=1);
+ await item.show();assert.equal(attempts,2);assert.equal(window.overlay.nodes.size,1);
+ const layer=[...window.overlay.nodes][0];layer.platform.layoutHost({width:300,height:500});await item.show();assert.equal(item.isShow(),true);
+ assert.equal(events.filter(e=>e.error?.code==='PERMISSION_DENIED'&&e.actualScope==='app').length,1);
+ assert.equal(h.controllers.length,1);assert.equal(h.listeners.length,1);await item.cancel();assert.equal(window.overlay.nodes.size,0);assert.equal(h.controllers.length,0);assert.equal(h.listeners.length,0);
+ assert.equal(window.overlay.disposals,2);await h.dispose();FloatingX.setLogger(undefined);
 });

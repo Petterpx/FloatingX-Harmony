@@ -2,9 +2,13 @@
   "modelVersion": "5.0.0",
   "name": "floatingx",
   "version": "0.1.0",
-  "description": "FloatingX floating window library for HarmonyOS Stage applications",
+  "description": "FloatingX-Harmony floating window library for HarmonyOS Stage applications",
   "main": "Index.ets",
   "dependencies": {},
   "license": "MIT",
-  "author": "Petterp"
+  "author": "Petterp",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Petterpx/FloatingX-Harmony"
+  }
 }

@@ -1,6 +1,8 @@
-# FloatingX · HarmonyOS
+# FloatingX-Harmony
 
 原生 ArkTS / ArkUI 浮窗 HAR，最低兼容 **HarmonyOS 5.0.0(12)**。提供局部 scope、单主窗口 app、受平台权限约束的 system 三种模式；统一 vp 坐标、Promise 控制器、typed Builder 内容。
+
+Android 支持见 [FloatingX Android](https://github.com/Petterpx/FloatingX)（Kotlin / Java / Jetpack Compose）。
 
 ## 先选模式
 
@@ -85,9 +87,9 @@ API12 无公开原生窗口 hide：system hide 隐藏内容、保持透明窗口
 
 - 工厂同步验证 options 并返回 `FxControl<T>`；窗口创建和系统权限检查推迟到首次 show。app/system tag 共用命名空间，重复同步抛 `DUPLICATE_TAG`；scope 不注册。
 - show/hide/cancel/move/moveByVector/updateConfig/updateContent/clearPosition 返回 Promise，使用 catch 或 try/await。cancel 幂等、同步作废世代；取消后所有修改 reject DESTROYED。
-- 保留工厂 typed 返回值以调用 updateContent；tag 查询 `control/controlOrNull` 只返回 `FxControlHandle`，不会把内容参数转换成任意类型。updateContent 更新原实例节点，成功意味着参数已提交，屏幕布局/绘制由 ArkUI 后续回测完成。
+- FxContent 不公开 native create/mount；节点由内部 adapter 创建并由 control 取消释放。保留工厂 typed 返回值以调用 updateContent；tag 查询 `control/controlOrNull` 只返回 `FxControlHandle`，不会把内容参数转换成任意类型。updateContent 更新原实例节点，成功意味着参数已提交，屏幕布局/绘制由 ArkUI 后续回测完成。
 - `getX/getY/isShow/getState` 读取已提交状态。实际 ATTACH/DETACH 与 SHOW/HIDE 分开；scope 卸载/重挂不会产生 DESTROY。
-- events 可返回 Promise；异步 rejection 和同步异常只进入已消毒的 EVENT_CALLBACK_FAILED 日志，不阻塞原生队列、不回滚成功操作、不递归发 ERROR。`setLogger` 为之后创建的控制器注入日志实现。
+- events、click / longPress / drag 回调可返回 Promise；异步 rejection 和同步异常只进入已消毒的 EVENT_CALLBACK_FAILED 日志，不阻塞原生队列、不回滚成功操作、不递归发 ERROR。`setLogger` 为之后创建的控制器注入日志实现。
 - uninstallAll 等待快照中每项清理，失败抛 FxUninstallError；failures 含 tag/FxError/platformCode。即使原生销毁失败，本地 tag/监听仍释放。新安装实例受身份保护。
 
 ## 配置与示例

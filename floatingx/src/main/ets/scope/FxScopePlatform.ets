@@ -5,7 +5,7 @@ import { FxController } from '../core/FxController';
 import { FxConfig } from '../core/FxConfig';
 import { FxError } from '../core/FxError';
 import { FxPoint, FxSize, FxInsets, FxViewport, FxProjection, FxDisplayMode, FxAnimationCurve } from '../core/FxTypes';
-import { FxGeometryInput, initial, clamp, bounds, settle, project } from '../geometry/FxGeometry';
+import { FxGeometryInput, initial, clamp, bounds, settle, project, logicalEdge, remap } from '../geometry/FxGeometry';
 import { FxContentSource, FxContentMount } from '../component/FxContent';
 import { FxTouch, FxPointer, FxTouchResult } from '../component/FxTouch';
 import { FxAnimation } from '../component/FxAnimation';
@@ -82,11 +82,13 @@ export class FxScopePlatform implements FxPlatform {
   layoutHost(size: FxSize, insets: FxInsets = {left:0,top:0,right:0,bottom:0}): void {
     if(this.destroyed || size.width<=0 || size.height<=0) return;
     this.cancelAnimations(); this.cancelTouch();
+    const previous=bounds(this.getGeometry()); const edge=logicalEdge(this.position,this.getGeometry());
+    const remapPosition=this.positioned && this.hostReady;
     this.viewport.size={width:size.width,height:size.height};
     this.viewport.insets={left:insets.left,top:insets.top,right:insets.right,bottom:insets.bottom};
     this.hostReady=true;
     if(this.created) this.attachContent();
-    if(this.positioned) this.position=clamp(this.position,bounds(this.getGeometry()));
+    if(this.positioned) this.position=remapPosition ? remap(this.position,previous,edge,bounds(this.getGeometry())) : clamp(this.position,bounds(this.getGeometry()));
     this.refresh();
     if(this.controller !== undefined && this.managesHostVisibility) this.controller.setHostVisible(true).catch(() => {});
   }
@@ -198,7 +200,10 @@ export class FxScopePlatform implements FxPlatform {
     } catch(error) { if(this.controller!==undefined) this.controller.reportError(error as Error); }
   }
   private runCallback(callback: () => void | Promise<void>): void {
-    const result=callback(); if(result!==undefined) this.observe(result as Promise<void>);
+    try {
+      const result=callback();
+      if(result!==undefined) (result as Promise<void>).catch(() => {if(this.controller!==undefined)this.controller.reportCallbackFailure();});
+    } catch(_) {if(this.controller!==undefined)this.controller.reportCallbackFailure();}
   }
   private settleDrag(): void {
     const target=settle(this.position,this.getGeometry());

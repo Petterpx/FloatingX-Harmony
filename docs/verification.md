@@ -1,6 +1,6 @@
 # FloatingX 验收记录
 
-验证日期：2026-10-10。对应任务 1–9 的最终生产源码与 Task9 修复；最低兼容/target 为 HarmonyOS 5.0.0(12)。本记录将源码/替身、真实编译、模拟器运行分别列出。**app/scope/system 已有一台 API24 phone 模拟器的部分平台证据；首版全部设备验收仍未完成。**
+验证日期：2026-10-10。对应任务 1–9 与整分支审查后的四项集中修复；最低兼容/target 为 HarmonyOS 5.0.0(12)。本记录将源码/替身、真实编译、模拟器运行分别列出。**app/scope/system 已有一台 API24 phone 模拟器的部分平台证据；首版全部设备验收仍未完成。**
 
 “实现并通过”只适用于同一行明确写出的验证层；“实现但待平台验收”表示代码存在但缺相应设备证据；“未完成”用于尚未执行的交付验收项，不把构建成功外推为交互通过。
 
@@ -8,15 +8,16 @@
 
 | 关口 | 本轮结果 | 证据 |
 | --- | --- | --- |
-| 工作树实际核心源码编译/测试 | Task9首轮全量193/193（d6a1af7）；review首轮 content/scope/system 70/70，第二轮 rollback 异常修复 system45/45；fail/skipped/cancelled 均0 | `work/task9-acceptance-core.log`；review `work/task9-review-core-build.log` 与 `work/task9-review-final-focused3.log`、`work/task9-review2-green.log` |
-| 官方 API12 严格 ArkTS 核心镜像检查 | 实现并通过：0 diagnostics，16 文件（含声明入口） | `work/task9-review2-strict.log` |
-| 商业 HarmonyOS SDK26 HAR | 实现并通过：真实 HarCompileArkTS/PackageHar，exit 0 | `work/task9-review2-delivery-commercial-har.log` |
-| 商业 SDK26 全部示例 HAP | 实现并通过：真实 CompileArkTS/PackageHap，exit 0 | `work/task9-review2-delivery-commercial-hap.log` |
-| 商业 SDK26 Hypium HAP | 实现并通过：真实 OhosTestCompileArkTS/PackageHap，exit 0 | `work/task9-review2-delivery-commercial-hypium.log` |
-| 独立消费者安装 packaged 商业 HAR | 实现并通过：仅 entry 源模块、公开 app/scope 入口、source/HAP 无系统权限；OHPM/HAP exit 0 | `work/task9-review2-delivery-consumer-{ohpm,hap}.log`、`work/task9-review2-delivery-consumer-proof.json` |
-| 公开 OpenHarmony API12 HAR/HAP/Hypium | 实现并通过：三项真实构建 exit 0 | `work/task9-review2-delivery-public12-{har,hap,hypium}.log` |
-| Hypium 真正执行 | 实现并通过：2/2，Failure/Error/Ignore 均 0，TestFinished-ResultCode 0 | `work/task9-hypium-run.log` |
-| packaged HAR 消费者 UI smoke | 实现并通过：下列已列出的 phone 模拟器场景，exit 0 | `work/task9-delivery-device-smoke.log`、`work/task9-delivery-device/commands.json` 与逐场景布局 |
+| 工作树实际核心源码编译/测试 | 最终全量219/219；fail/skipped/cancelled 均0；四项缺陷先RED18项，再集成GREEN98/98 | `work/final-core.log`、`work/final-red.log`、`work/final-green2.log` |
+| 官方 API12 严格 ArkTS 核心镜像检查 | 0 diagnostics，16 文件（含声明入口） | `work/final-strict.log` |
+| 商业 HarmonyOS SDK26 HAR | 真实 HarCompileArkTS/PackageHar，exit 0 | `work/final-release-commercial-har.log` |
+| 商业 SDK26 全部示例 HAP | 真实 CompileArkTS/PackageHap，exit 0 | `work/final-release-commercial-hap.log` |
+| 商业 SDK26 Hypium HAP | 真实 OhosTestCompileArkTS/PackageHap，exit 0；本轮未重跑Hypium设备执行 | `work/final-release-commercial-hypium.log` |
+| 独立消费者安装 packaged 商业 HAR | 仅 entry 源模块、公开 app/scope 入口、source/HAP 无系统权限；OHPM/HAP exit 0 | `work/final-release-consumer-{ohpm,hap}.log`、`work/final-release-consumer-proof.json` |
+| 消费者公开类与泛型负编译 | `FxContent.create`不存在；`updateContent(123)`被类型拒绝；恢复正常源码后HAP exit0 | `work/final-release-consumer-negative.log`、`work/final-release-consumer-hap.log` |
+| 公开 OpenHarmony API12 HAR/HAP/Hypium | 三项真实构建 exit 0 | `work/final-release-public12-{har,hap,hypium}.log` |
+| Hypium 历史设备执行 | Task9所记录旧HAR的2/2，Failure/Error/Ignore 均 0，TestFinished-ResultCode 0 | `work/task9-hypium-run.log` |
+| packaged HAR 历史消费者 UI smoke | Task9所记录旧HAR的下列 phone 模拟器场景，exit 0 | `work/task9-delivery-device-smoke.log`、`work/task9-delivery-device/commands.json` 与逐场景布局 |
 | git diff 空白检查 | 提交前通过 | `git diff --check`，完整命令表在 Task9 本地报告 |
 
 编译器固定为商业 SDK **26.0.0.105/API26**，Hvigor/plugin **6.26.8**，OHPM **26.0.0.630**，配套 Node **v24.14.1**；公开 SDK 为 **5.0.0.71/API12**，Hvigor/plugin **5.2.2**。主机测试 Node **v20.20.1**，TypeScript **5.9.3**。版本、设置和重现步骤见 [toolchain.md](toolchain.md)。正式 profile 只移除旧 compileSdkVersion，compatible/target 仍为 12；公开 SDK 的 runtime/device type 映射只发生在 ignored scratch。
@@ -99,4 +100,12 @@ app/scope 的完整22项 smoke、旧动态尺寸、Hypium2/2使用先前商业 H
 
 未完成的交付项：API12 phone 真机、tablet；实际旋转/分屏/键盘/安全区变化；双指完整组合；Dialog 真正重叠层级；原生 Preferences 重启；所有 gravity/多实例/native 故障压力；有批准商业系统设备上的跨应用显示、尺寸/四边、hide 阴影/焦点/触摸及 Ability owner 销毁。按 §8 逐项补型号、OS/API、动作、结果和证据，失败后只重跑受影响测试/构建。
 
-最终七个 HAR/HAP 的路径、大小和 SHA256 在 `work/task9-review2-delivery-artifacts.json`；可复现命令与完整原始退出码在 `work/task9-commands.json`，设备 smoke 逐条命令在 `work/task9-delivery-device/commands.json`。本地 SDD Task9 报告记录自审与提交，独立 Task9/整分支审查由统筹在提交后执行，不能把本次自审称为独立审查已完成。
+最新七个交付HAR/HAP及单独设备fixture的路径、大小和SHA256以 `work/final-artifact-manifest.json` 为真值；可复现构建命令与退出码在 `work/final-release-commands.json`，源码关口命令与日志在 `work/final-commands.json`，设备 smoke 逐条命令在 `work/task9-delivery-device/commands.json`。本地 SDD Task9 报告记录自审与提交，独立 Task9/整分支审查由统筹在提交后执行，不能把本次自审称为独立审查已完成。
+
+## 整分支审查后的受影响路径
+
+live host/display变化现在先保存完整旧bounds及logical edge，再映射到新范围；四边、宽/高增减及insets变化覆盖真实scope/system adapter，app覆盖实际overlay resize。fallback首次create失败后的show可以再次分配，复用原controller/host绑定，成功原因回调一次。公开FxContent通过内部WeakMap source association提供native factory，类本身没有create/mount；typed updateContent与cancel竞态仍由真实facade回归覆盖。同步/异步click、longPress、drag异常只记录消毒EVENT_CALLBACK_FAILED，不作为native ERROR事件分发。
+
+最新商业及公开API12 HAR各自的27个生产源码文件加Index入口，与当前工作树共28文件逐字一致，见 `work/final-har-source-proof.json`。最终公开仓库展示名FloatingX-Harmony与repository URL已包含在包元数据；导入名仍为floatingx。此前Task9完整smoke/Hypium及system设备证据保留其历史HAR哈希，不外推成此次重跑。
+
+本轮API24模拟器受影响路径通过：scope host340×300→300×220→恢复，right半隐藏位置120,95→80,55→120,95vp；同native节点typed更新220→260vp，完整宽770→910px、可见宽385→455px；cancel移除内容。其结果、实际HAR/HAP哈希见 `work/final-device-proof.json`，原始结果见 `work/final-device.log`，逐条命令见 `work/final-device-commands.json`。fallback瞬时overlay失败只在真实app adapter宿主回归安全模拟，没有设备端注入。API12 phone/tablet、商业授权system、system四边半隐藏、rotation/split-screen/keyboard及既有未验收矩阵继续待平台验收。

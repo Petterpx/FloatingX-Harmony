@@ -5,7 +5,7 @@ import { FxError } from './core/FxError';
 import { FxConfig } from './core/FxConfig';
 import { FxState, FxEventType, FxEventCallback, FxLogger, FxPlatform, FxScope } from './core/FxPlatform';
 import { FxSize } from './core/FxTypes';
-import { FxContent } from './component/FxContent';
+import { FxContent, contentSource } from './component/FxContent';
 import { FxScopePlatform, FxInteractions } from './scope/FxScopePlatform';
 import { bindScopeHost, releaseScopeHost } from './scope/FxHostBinding';
 import { FxAppPlatform } from './app/FxAppPlatform';
@@ -94,7 +94,7 @@ function make<T extends Object>(options: FxScopeOptions<T>, config: FxConfig, pl
   if(options.storage!==undefined)controller.bindPositionStorage(options.storage,geometry);
   if(platform instanceof FxAppPlatform)platform.bindController(controller);
   else if(platform instanceof FxSystemPlatform)platform.bindController(controller);
-  else if(platform instanceof FxScopePlatform) {platform.bindController(controller);bindScopeHost(control,{controller:controller,content:options.content,platform:platform});}
+  else if(platform instanceof FxScopePlatform) {platform.bindController(controller);bindScopeHost(control,{controller:controller,content:contentSource(options.content),platform:platform});}
   if(tag!==undefined) {registry.register(tag,controller);controls.set(tag,control);}
   return control;
 }
@@ -109,7 +109,7 @@ export class FloatingX {
     const scoped=installationOptions(options,options.tag,options.storage);
     const config=validate(scoped);validateTag(options.tag);
     if(options.host===undefined || !options.host.isValid())throw new FxError('NO_HOST','A loaded WindowHost is required');
-    const platform=new FxAppPlatform(options.host,options.content,options.pagePolicy,options.interactions);
+    const platform=new FxAppPlatform(options.host,contentSource(options.content),options.pagePolicy,options.interactions);
     return make(scoped,config,platform,() => platform.getGeometry(),options.tag);
   }
   static installSystem<T extends Object>(options: FxSystemOptions<T>): FxControl<T> {
@@ -122,9 +122,9 @@ export class FloatingX {
       const selected=options.fallback;
       if(selected.host===undefined || !selected.host.isValid())throw new FxError('NO_HOST','Fallback requires a loaded WindowHost');
       const policy=copyPagePolicy(selected.pagePolicy===undefined?{mode:'blacklist',names:[]}:selected.pagePolicy);
-      fallback=() => new FxAppPlatform(selected.host,options.content,policy,options.interactions);
+      fallback=() => new FxAppPlatform(selected.host,contentSource(options.content),policy,options.interactions);
     }
-    const source=options.content;
+    const source=contentSource(options.content);
     const input: FxGeometryInput={viewport:{size:{width:options.size.width,height:options.size.height},insets:{left:0,top:0,right:0,bottom:0}},content:{width:options.size.width,height:options.size.height},config:config};
     const platform=new FxSystemPlatform(new FxNativeWindowFactory(options.context,source,options.interactions),input,fallback);
     return make(scoped,config,platform,() => platform.getGeometry(),options.tag);

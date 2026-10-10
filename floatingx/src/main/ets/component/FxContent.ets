@@ -65,7 +65,7 @@ class FxTypedMount<T extends Object> implements FxContentMount {
   }
 }
 /** Builder parameters remain typed; renderer receives the native non-generic Content base. */
-export class FxContent<T extends Object> implements FxContentSource {
+class FxTypedSource<T extends Object> implements FxContentSource {
   private nodes: ComponentContent<T>[] = [];
   readonly builder: WrappedBuilder<[T]>;
   private params: T;
@@ -92,4 +92,23 @@ export class FxContent<T extends Object> implements FxContentSource {
     this.params = params;
     for (let i = 0; i < this.nodes.length; i++) this.nodes[i].update(params);
   }
+}
+
+// Weak association keeps the native allocation protocol outside the consumer-visible class.
+const sources: WeakMap<Object,FxContentSource> = new WeakMap();
+export function contentSource<T extends Object>(content: FxContent<T>): FxContentSource {
+  const source=sources.get(content);
+  if(source===undefined)throw new FxError('INVALID_CONFIG','Content source is unavailable');
+  source.size=content.size;return source;
+}
+/** Public typed builder/value surface; installed adapters exclusively own native mounts. */
+export class FxContent<T extends Object> {
+  readonly builder: WrappedBuilder<[T]>;
+  size: FxSize;
+  private source: FxTypedSource<T>;
+  constructor(builder: WrappedBuilder<[T]>, params: T, size: FxSize) {
+    this.source=new FxTypedSource<T>(builder,params,size);this.builder=builder;this.size=this.source.size;
+    sources.set(this,this.source);
+  }
+  update(params: T, valid: () => boolean = () => true): Promise<void> {return this.source.update(params,valid);}
 }

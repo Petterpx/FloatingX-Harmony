@@ -161,6 +161,22 @@ function relative(value: number, oldMin: number, oldMax: number, newMin: number,
   return newMin + fraction * (newMax - newMin);
 }
 
+/** Live geometry owns exact historical bounds, unlike version-1 persisted records. */
+export function remap(point: FxPoint, oldLimits: FxBounds, edge: FxEdge, limits: FxBounds): FxPoint {
+  validatePoint(point); validateBounds(oldLimits); validateBounds(limits);
+  const result: FxPoint = {
+    x: relative(point.x, oldLimits.minX, oldLimits.maxX, limits.minX, limits.maxX),
+    y: relative(point.y, oldLimits.minY, oldLimits.maxY, limits.minY, limits.maxY)
+  };
+  switch (edge) {
+    case FxEdge.LEFT: result.x = limits.minX; break;
+    case FxEdge.RIGHT: result.x = limits.maxX; break;
+    case FxEdge.TOP: result.y = limits.minY; break;
+    case FxEdge.BOTTOM: result.y = limits.maxY; break;
+  }
+  return clamp(result, limits);
+}
+
 /**
  * Reconstructs the old range using current content/insets/margins, scales its relative coordinates,
  * then reapplies the stored edge. Version 1 has no historical content/inset data; exact historical
@@ -178,15 +194,5 @@ export function restore(record: FxPositionRecord, input: FxGeometryInput): FxPoi
   const oldViewport: FxViewport = { size: record.viewport, insets: input.viewport.insets };
   const oldInput: FxGeometryInput = { viewport: oldViewport, content: input.content, config: input.config };
   const oldLimits = bounds(oldInput);
-  const result: FxPoint = {
-    x: relative(record.position.x, oldLimits.minX, oldLimits.maxX, limits.minX, limits.maxX),
-    y: relative(record.position.y, oldLimits.minY, oldLimits.maxY, limits.minY, limits.maxY)
-  };
-  switch (record.edge) {
-    case FxEdge.LEFT: result.x = limits.minX; break;
-    case FxEdge.RIGHT: result.x = limits.maxX; break;
-    case FxEdge.TOP: result.y = limits.minY; break;
-    case FxEdge.BOTTOM: result.y = limits.maxY; break;
-  }
-  return clamp(result, limits);
+  return remap(record.position, oldLimits, record.edge, limits);
 }
