@@ -317,8 +317,14 @@ def main():
         if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', args.repository):
             raise ValueError('Invalid GitHub repository')
         url = f'https://api.github.com/repos/{args.repository}/releases/tags/' + urllib.parse.quote(args.tag, safe='')
+        headers = {'Accept': 'application/vnd.github+json', 'User-Agent': 'FloatingX-Release',
+                   'X-GitHub-Api-Version': '2022-11-28'}
+        token = os.environ.get('GH_TOKEN')
+        if token:
+            headers['Authorization'] = f'Bearer {token}'
+        request = urllib.request.Request(url, headers=headers)
         try:
-            with urllib.request.urlopen(url, timeout=60) as response:
+            with urllib.request.urlopen(request, timeout=60) as response:
                 release = json.load(response)
         except urllib.error.HTTPError as error:
             if error.code == 404:

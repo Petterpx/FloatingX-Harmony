@@ -35,6 +35,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Validate and resolve exact tag
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: python3 scripts/ci/release.py resolve --tag "$RELEASE_TAG" --repository "$RELEASE_REPOSITORY"
       - name: Verify runner architecture
         run: |

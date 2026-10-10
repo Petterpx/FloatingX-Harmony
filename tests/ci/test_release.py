@@ -238,6 +238,31 @@ class ReleaseTests(unittest.TestCase):
                     r.publish(args)
             self.assertEqual(state['mutations'], 0)
 
+    def assert_resolve_headers_and_missing_release(self, token):
+        r = self.implementation()
+        def urlopen(request, timeout=None):
+            self.assertIsInstance(request, r.urllib.request.Request)
+            self.assertEqual(r.urllib.parse.urlsplit(request.full_url).hostname, 'api.github.com')
+            self.assertEqual(request.get_header('Accept'), 'application/vnd.github+json')
+            self.assertEqual(request.get_header('User-agent'), 'FloatingX-Release')
+            self.assertEqual(request.get_header('X-github-api-version'), '2022-11-28')
+            self.assertEqual(request.get_header('Authorization'), f'Bearer {token}' if token else None)
+            self.assertEqual(timeout, 60)
+            error = r.urllib.error.HTTPError(request.full_url, 404, 'Not Found', {}, io.BytesIO(b''))
+            error.close()
+            raise error
+        argv = ['release.py', 'resolve', '--tag', 'v1.2.3', '--repository', 'owner/repo']
+        env = {'GH_TOKEN': token} if token else {}
+        with patch.dict(r.os.environ, env, clear=True), patch('sys.argv', argv), patch.object(r.urllib.request, 'urlopen', urlopen):
+            with self.assertRaisesRegex(ValueError, 'No existing published Release'):
+                r.main()
+
+    def test_resolve_uses_scoped_api_read_token_headers(self):
+        self.assert_resolve_headers_and_missing_release('test-read-only-token')
+
+    def test_resolve_without_token_supports_public_404_rejection(self):
+        self.assert_resolve_headers_and_missing_release(None)
+
     def test_manifest_detects_tamper_and_rejects_commit_replacement(self):
         r = self.implementation()
         with tempfile.TemporaryDirectory() as tmp:
