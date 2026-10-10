@@ -1,0 +1,9 @@
+{
+  "name": "floatingx-release-toolchain",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@ohos/hvigor": "5.2.2",
+    "@ohos/hvigor-ohos-plugin": "5.2.2"
+  }
+}

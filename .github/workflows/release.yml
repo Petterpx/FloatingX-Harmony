@@ -1,0 +1,101 @@
+name: Release assets
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing published Release tag (vX.Y.Z or vX.Y.Z-prerelease)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-assets-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 60
+    outputs:
+      tag: ${{ steps.build.outputs.tag }}
+      commit: ${{ steps.build.outputs.commit }}
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      RELEASE_REPOSITORY: ${{ github.repository }}
+    steps:
+      - name: Checkout workflow tooling
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5c8093 # v4.3.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate and resolve exact tag
+        run: python3 scripts/ci/release.py resolve --tag "$RELEASE_TAG" --repository "$RELEASE_REPOSITORY"
+      - name: Verify runner architecture
+        run: |
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20.20.1
+      - name: Test release safeguards
+        run: python3 -m unittest discover -s tests/ci -v
+      - name: Cache verified toolchain archives
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: |
+            work/release-ci/toolchain/sdk.tar.gz
+            work/release-ci/toolchain/ohpm.zip
+          key: public-api12-darwin-arm64-${{ hashFiles('scripts/ci/toolchain.json') }}
+      - name: Install pinned official SDK and tools
+        run: python3 scripts/ci/toolchain.py --directory work/release-ci/toolchain
+      - name: Test and build tagged HAR and unsigned demo HAP
+        id: build
+        run: >-
+          python3 scripts/ci/release.py build --tag "$RELEASE_TAG"
+          --sdk "$RELEASE_SDK" --ohpm "$RELEASE_OHPM" --work work/release-ci/build
+      - name: Transfer four verified assets
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-assets
+          path: |
+            work/release-ci/build/assets/floatingx-${{ steps.build.outputs.tag }}.har
+            work/release-ci/build/assets/floatingx-demo-${{ steps.build.outputs.tag }}-openharmony-api12-unsigned.hap
+            work/release-ci/build/assets/SHA256SUMS
+            work/release-ci/build/assets/manifest.json
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout publication tooling
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5c8093 # v4.3.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Download verified build assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-assets
+          path: work/release-ci/assets
+      - name: Upload only to the existing published Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+          SOURCE_COMMIT: ${{ needs.build.outputs.commit }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: >-
+          python3 scripts/ci/release.py publish --tag "$RELEASE_TAG"
+          --commit "$SOURCE_COMMIT" --repository "$RELEASE_REPOSITORY"
+          --assets work/release-ci/assets

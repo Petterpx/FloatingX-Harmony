@@ -1,0 +1,17 @@
+{
+  "node": "20.20.1",
+  "hvigor": "5.2.2",
+  "hvigorOhosPlugin": "5.2.2",
+  "sdk": {
+    "version": "5.0.0.71",
+    "api": 12,
+    "platform": "darwin-arm64",
+    "url": "https://repo.huaweicloud.com/openharmony/os/5.0.0-Release/L2-SDK-MAC-M1-PUBLIC.tar.gz",
+    "sha256": "55251a081bb4a18c42a7f6c482f34e8c38ce0a3b95cef9dd8548019c25e9dc87"
+  },
+  "ohpm": {
+    "version": "5.0.2",
+    "url": "https://repo.huaweicloud.com/harmonyos/ohpm/5.0.2/oh-command-line-tools-20240715.zip",
+    "sha256": "a91888b3c1623d29fd0e387eee4f5e9523cc8f6242de9cb4be3ef8c46eab7e4a"
+  }
+}

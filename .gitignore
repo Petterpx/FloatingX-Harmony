@@ -1,4 +1,5 @@
 # Local tools, dependencies and generated output
+__pycache__/
 node_modules/
 oh_modules/
 build/
