@@ -28,3 +28,8 @@ local-signing*.json5
 *.crt
 *.pem
 *.key
+
+# Local development plans, design notes and verification reports
+docs/superpowers/
+docs/verification.md
+docs/toolchain.md
