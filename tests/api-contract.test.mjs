@@ -104,3 +104,15 @@ test('real app fallback first allocation failure retries show without duplicate 
  assert.equal(h.controllers.length,1);assert.equal(h.listeners.length,1);await item.cancel();assert.equal(window.overlay.nodes.size,0);assert.equal(h.controllers.length,0);assert.equal(h.listeners.length,0);
  assert.equal(window.overlay.disposals,2);await h.dispose();FloatingX.setLogger(undefined);
 });
+
+test('public fallback lifecycle reports app scope from its first actual attach',async()=>{
+ const window=new AppWindow();const h=await FxWindowHost.create({getMainWindow:async()=>window});const events=[];
+ FloatingX.setLogger({error(){}});
+ const item=FloatingX.installSystem({tag:'fallback-event-scope',context:{},content:content(),size:{width:50,height:50},config:new FxConfig(),fallback:{host:h},events:event=>events.push(event)});
+ await item.show();const layer=[...window.overlay.nodes][0];layer.platform.layoutHost({width:300,height:500});await item.show();
+ assert.deepEqual(events.map(event=>[event.type,event.actualScope,event.error?.code]),[
+  ['attach','app',undefined],['error','app','PERMISSION_DENIED'],['show','app',undefined]
+ ]);
+ await item.cancel();assert.equal(window.overlay.nodes.size,0);assert.equal(h.controllers.length,0);assert.equal(h.listeners.length,0);
+ await h.dispose();FloatingX.setLogger(undefined);
+});

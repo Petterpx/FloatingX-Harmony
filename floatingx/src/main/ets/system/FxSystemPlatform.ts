@@ -64,7 +64,9 @@ export class FxSystemPlatform implements FxPlatform {
   }
   private async createFallback(): Promise<void> {
     const fallback=this.fallback;if(fallback===undefined || this.fallbackCreated)return;
-    await fallback.create();this.assertAlive();this.fallbackCreated=true;this.actualScope=FxScope.APP;
+    // The app owns any ATTACH emitted synchronously inside its create, even before readiness.
+    this.actualScope=FxScope.APP;
+    await fallback.create();this.assertAlive();this.fallbackCreated=true;
     const cause=this.fallbackCause;this.fallbackCause=undefined;
     if(cause!==undefined) {
       const event: FxEvent={type:FxEventType.ERROR,position:this.getPosition(),actualScope:FxScope.APP,error:cause};

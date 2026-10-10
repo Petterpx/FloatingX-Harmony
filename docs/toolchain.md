@@ -41,10 +41,10 @@ hvigorw --mode module -p module=entry@ohosTest -p product=default assembleHap --
 
 | 产物 | 实际本地产物路径 |
 | --- | --- |
-| 商业 HAR | `work/final-release-commercial/floatingx/build/default/outputs/default/floatingx.har` |
-| 商业示例 HAP | `work/final-release-commercial/entry/build/default/outputs/default/entry-default-unsigned.hap` |
-| 商业 Hypium HAP | `work/final-release-commercial/entry/build/default/outputs/ohosTest/entry-ohosTest-unsigned.hap` |
-| 无系统权限消费者 HAP | `work/final-release-consumer/entry/build/default/outputs/default/entry-default-unsigned.hap` |
+| 商业 HAR | `work/final-scope-release-commercial/floatingx/build/default/outputs/default/floatingx.har` |
+| 商业示例 HAP | `work/final-scope-release-commercial/entry/build/default/outputs/default/entry-default-unsigned.hap` |
+| 商业 Hypium HAP | `work/final-scope-release-commercial/entry/build/default/outputs/ohosTest/entry-ohosTest-unsigned.hap` |
+| 无系统权限消费者 HAP | `work/final-scope-release-consumer/entry/build/default/outputs/default/entry-default-unsigned.hap` |
 
 产物、完整日志和本机工具留在被忽略的 `work/`，未发布 OHPM、创建云端仓库或上传签名。SHA256、大小记录在 `work/final-artifact-manifest.json`。正常在根仓库构建时，输出位于对应模块的 `build/default/outputs/`。
 
@@ -52,7 +52,7 @@ hvigorw --mode module -p module=entry@ohosTest -p product=default assembleHap --
 
 ## packaged HAR 消费验证
 
-消费者只保留 entry workspace module，删除 floatingx 源码模块；OHPM 依赖改为 `file:../floatingx.har`，安装上表实际商业 HAR，页面只使用公开 app/scope 接口。消费者源码与 packaged HAP `module.json` 都不含 SYSTEM_FLOAT_WINDOW；HAR SHA 和权限断言保存在 `work/final-release-consumer-proof.json`。因此这项验证使用实际打包产物，并非源模块软链接。
+消费者只保留 entry workspace module，删除 floatingx 源码模块；OHPM 依赖改为 `file:../floatingx.har`，安装上表实际商业 HAR，页面只使用公开 app/scope 接口。消费者源码与 packaged HAP `module.json` 都不含 SYSTEM_FLOAT_WINDOW；HAR SHA 和权限断言保存在 `work/final-scope-release-consumer-proof.json`。因此这项验证使用实际打包产物，并非源模块软链接。
 
 ## 公开 API12 验证
 
@@ -68,7 +68,7 @@ node "$PUBLIC_HVIGOR/node_modules/@ohos/hvigor/bin/hvigor.js" \
 # 示例 / Hypium：模块换为 entry@default / entry@ohosTest，任务换为 assembleHap。
 ```
 
-最终 API12 三项构建均退出 0；产物在 `work/final-release-public12/` 对应模块输出目录。另用该 SDK 的真实 ArkTS linter 对实际 `.ts` 核心源码建立 `.ets` 镜像：16 个文件（含声明入口），0 diagnostics。它只证明该核心子集，完整 native `.ets` 由上述真实 HAR/HAP 编译证明。
+最终 API12 三项构建均退出 0；产物在 `work/final-scope-release-public12/` 对应模块输出目录。另用该 SDK 的真实 ArkTS linter 对实际 `.ts` 核心源码建立 `.ets` 镜像：16 个文件（含声明入口），0 diagnostics。它只证明该核心子集，完整 native `.ets` 由上述真实 HAR/HAP 编译证明。
 
 `npm run test:core` 先从工作树实际 `.ts` 编译到 `work/core/`，再运行 Node 测试；native 类的行为测试转译实际 `.ets` 并替换 SDK 边界，不复制生产算法。它们不模拟 ArkUI 渲染，也不能证明设备触摸或系统窗口授权。
 
@@ -97,4 +97,6 @@ Stage/HAR 骨架依据固定 [OpenHarmony 官方样例](https://github.com/openh
 
 系统许可仍遵循 [HarmonyOS V5 受限权限政策](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-v5/restricted-permissions-V5)：SYSTEM_FLOAT_WINDOW 是 system_grant，限批准的 2in1 多方视频/屏幕共享场景。声明权限、构建成功、模拟器安装均不扩展该政策。签名 [ACL 支持说明](https://developer.huawei.com/consumer/cn/doc/HarmonyOS-Guides/ide-signing-auto) 也不是手机/平板系统浮窗许可。
 
-整分支审查四项修复后的最终源码关口为 `npm run test:core` 219/219（`work/final-core.log`）；官方API12 strict为16文件0 diagnostics（`work/final-strict.log`）。新packaged-HAR消费者额外做真实ArkTS负编译：FxContent.create不存在、错误updateContent参数被拒绝，然后恢复正常源码构建成功。负编译日志 `work/final-release-consumer-negative.log`，完整最新构建命令 `work/final-release-commands.json`。商业与公开HAR生产源码加Index入口各28文件与工作树逐字一致，另核对repository元数据，证明在 `work/final-har-source-proof.json`；最新产物以 `work/final-artifact-manifest.json` 为准。
+整分支审查四项修复后的最终源码关口为 `npm run test:core` 220/220（`work/final-scope-core.log`）；官方API12 strict为16文件0 diagnostics（`work/final-scope-strict.log`）。新packaged-HAR消费者额外做真实ArkTS负编译：FxContent.create不存在、错误updateContent参数被拒绝，然后恢复正常源码构建成功。负编译日志 `work/final-scope-release-consumer-negative.log`，完整最新构建命令 `work/final-scope-release-commands.json`。商业与公开HAR生产源码加Index入口各28文件与工作树逐字一致，另核对repository元数据，证明在 `work/final-har-source-proof.json`；最新产物以 `work/final-artifact-manifest.json` 为准。
+
+发布前fallback ATTACH实际scope纠正后，七个正式产物重新构建，命令及退出码在 `work/final-scope-release-commands.json`；manifest及HAR/source相等证明已刷新。此小修没有再次设备执行；历史API24 fixture的HAR仍为56f4932b…，最新manifest显式区分该设备证据与新交付HAR。
